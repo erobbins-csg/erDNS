@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Technitium DNS Server is a cross-platform, open-source authoritative and recursive DNS server written in C# targeting .NET 9. It provides a web-based admin console on port 5380 and supports encrypted DNS transports (DoT, DoH, DoQ).
+This project, erDNS, is a customized fork of Technitium DNS Server, which is a cross-platform, open-source authoritative and recursive DNS server written in C# targeting .NET 10. It provides a web-based admin console on port 5380 and supports encrypted DNS transports (DoT, DoH, DoQ).
 
 ## Build Requirements
 
@@ -13,7 +13,7 @@ This project depends on [TechnitiumLibrary](https://github.com/TechnitiumSoftwar
 ```
 parent/
   TechnitiumLibrary/   ← must exist here
-  DnsServer/           ← this repo
+  erDNS/           ← this repo
 ```
 
 ## Build Commands
@@ -25,7 +25,7 @@ dotnet build TechnitiumLibrary/TechnitiumLibrary.Net/TechnitiumLibrary.Net.cspro
 dotnet build TechnitiumLibrary/TechnitiumLibrary.Security.OTP/TechnitiumLibrary.Security.OTP.csproj -c Release
 
 # Build/publish the main application (from this repo's parent)
-dotnet publish DnsServer/DnsServerApp/DnsServerApp.csproj -c Release
+dotnet publish erDNS/DnsServerApp/DnsServerApp.csproj -c Release
 
 # Build solution (from repo root)
 dotnet build DnsServer.sln -c Release
