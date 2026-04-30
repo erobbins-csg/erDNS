@@ -78,24 +78,12 @@ namespace QueryLogsPostgreSql
                     {
                         if (_maxLogRecords > 0)
                         {
-                            int totalRecords;
-
                             await using (NpgsqlCommand command = connection.CreateCommand())
                             {
-                                command.CommandText = "SELECT Count(*) FROM dns_logs;";
+                                command.CommandText = "DELETE FROM dns_logs WHERE dlid IN (SELECT dlid FROM dns_logs ORDER BY dlid OFFSET @maxLogRecords);";
+                                command.Parameters.AddWithValue("@maxLogRecords", _maxLogRecords);
 
-                                totalRecords = Convert.ToInt32(await command.ExecuteScalarAsync());
-                            }
-
-                            int recordsToRemove = totalRecords - _maxLogRecords;
-                            if (recordsToRemove > 0)
-                            {
-                                await using (NpgsqlCommand command = connection.CreateCommand())
-                                {
-                                    command.CommandText = $"DELETE FROM dns_logs WHERE dlid IN (SELECT * FROM (SELECT dlid FROM dns_logs ORDER BY dlid LIMIT {recordsToRemove}) AS T1);";
-
-                                    await command.ExecuteNonQueryAsync();
-                                }
+                                await command.ExecuteNonQueryAsync();
                             }
                         }
 
@@ -661,7 +649,7 @@ CREATE TABLE IF NOT EXISTS dns_logs
             if (qname is not null)
                 qname = qname.ToLowerInvariant();
 
-            string whereClause = $"server = '{_dnsServer?.ServerDomain}' AND ";
+            string whereClause = string.Empty;
 
             if (start is not null)
                 whereClause += "timestamp >= @start AND ";
