@@ -342,6 +342,14 @@ namespace DnsServerCore
                     jsonWriter.WriteString("ssoClientSecret", "************");
 
                 jsonWriter.WriteString("ssoMetadataAddress", _dnsWebService._authManager.SsoMetadataAddress?.OriginalString);
+
+                jsonWriter.WriteStartArray("ssoScopes");
+
+                foreach (string ssoScope in _dnsWebService._authManager.SsoScopes)
+                    jsonWriter.WriteStringValue(ssoScope);
+
+                jsonWriter.WriteEndArray();
+
                 jsonWriter.WriteBoolean("ssoAllowSignup", _dnsWebService._authManager.SsoAllowSignup);
                 jsonWriter.WriteBoolean("ssoAllowSignupOnlyForMappedUsers", _dnsWebService._authManager.SsoAllowSignupOnlyForMappedUsers);
 
@@ -1740,6 +1748,17 @@ namespace DnsServerCore
                     if (_dnsWebService._authManager.SsoMetadataAddress != ssoMetadataAddress)
                     {
                         _dnsWebService._authManager.SsoMetadataAddress = ssoMetadataAddress;
+                        restartWebService = true;
+                    }
+                }
+
+                if (request.TryQueryOrFormArray("ssoScopes", out string[] strSsoScopes, '|'))
+                {
+                    HashSet<string> ssoScopes = new HashSet<string>(strSsoScopes);
+
+                    if (!_dnsWebService._authManager.SsoScopes.HasSameItems(ssoScopes))
+                    {
+                        _dnsWebService._authManager.SsoScopes = ssoScopes;
                         restartWebService = true;
                     }
                 }

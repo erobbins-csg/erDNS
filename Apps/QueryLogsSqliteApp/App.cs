@@ -58,6 +58,7 @@ namespace QueryLogsSqlite
         Thread? _consumerThread;
         const int BULK_INSERT_COUNT = 1000;
         const int BULK_INSERT_ERROR_DELAY = 10000;
+        const int BULK_REMOVE_COUNT = 10000;
 
         readonly Timer _cleanupTimer;
         const int CLEAN_UP_TIMER_INITIAL_INTERVAL = 5 * 1000;
@@ -77,33 +78,67 @@ namespace QueryLogsSqlite
                     {
                         await connection.OpenAsync();
 
-                        int deletedRecords = 0;
+                        bool doVacuum = false;
 
                         if (_maxLogRecords > 0)
                         {
+                            int totalRecords;
+
                             await using (SqliteCommand command = connection.CreateCommand())
                             {
-                                command.CommandText = "DELETE FROM dns_logs WHERE ROWID IN (SELECT ROWID FROM dns_logs ORDER BY ROWID DESC LIMIT -1 OFFSET @maxLogRecords);";
+                                command.CommandText = "SELECT Count(*) FROM dns_logs;";
 
-                                command.Parameters.AddWithValue("@maxLogRecords", _maxLogRecords);
+                                totalRecords = Convert.ToInt32(await command.ExecuteScalarAsync());
+                            }
 
-                                deletedRecords += await command.ExecuteNonQueryAsync();
+                            int recordsToRemove = totalRecords - _maxLogRecords;
+                            if (recordsToRemove > 0)
+                            {
+                                await BatchRemove(recordsToRemove);
+                                doVacuum = true;
                             }
                         }
 
                         if (_maxLogDays > 0)
                         {
+                            int recordsToRemove;
+
                             await using (SqliteCommand command = connection.CreateCommand())
                             {
-                                command.CommandText = "DELETE FROM dns_logs WHERE timestamp < @timestamp;";
+                                command.CommandText = "SELECT Count(*) FROM dns_logs WHERE timestamp < @timestamp;";
 
                                 command.Parameters.AddWithValue("@timestamp", DateTime.UtcNow.AddDays(_maxLogDays * -1));
 
-                                deletedRecords += await command.ExecuteNonQueryAsync();
+                                recordsToRemove = Convert.ToInt32(await command.ExecuteScalarAsync());
+                            }
+
+                            if (recordsToRemove > 0)
+                            {
+                                await BatchRemove(recordsToRemove);
+                                doVacuum = true;
                             }
                         }
 
-                        if (_enableVacuum && (deletedRecords > 0))
+                        async Task BatchRemove(int recordsToRemove)
+                        {
+                            int batchToRemove;
+
+                            while (recordsToRemove > 0)
+                            {
+                                batchToRemove = Math.Min(recordsToRemove, BULK_REMOVE_COUNT);
+
+                                await using (SqliteCommand command = connection.CreateCommand())
+                                {
+                                    command.CommandText = $"DELETE FROM dns_logs WHERE dlid IN (SELECT dlid FROM dns_logs ORDER BY dlid LIMIT {batchToRemove});";
+
+                                    await command.ExecuteNonQueryAsync();
+                                }
+
+                                recordsToRemove -= batchToRemove;
+                            }
+                        }
+
+                        if (_enableVacuum && doVacuum)
                         {
                             await using (SqliteCommand command = connection.CreateCommand())
                             {
@@ -632,7 +667,9 @@ CREATE TABLE IF NOT EXISTS dns_logs
 
                 long totalPages = (totalEntries / entriesPerPage) + (totalEntries % entriesPerPage > 0 ? 1 : 0);
 
-                if ((pageNumber > totalPages) || (pageNumber < 0))
+                if (totalPages < 1)
+                    pageNumber = 1;
+                else if ((pageNumber > totalPages) || (pageNumber < 0))
                     pageNumber = totalPages;
 
                 long offset = (pageNumber - 1) * entriesPerPage;

@@ -26,6 +26,7 @@ using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using TechnitiumLibrary;
 using TechnitiumLibrary.IO;
 using TechnitiumLibrary.Net;
 using TechnitiumLibrary.Security.OTP;
@@ -55,6 +56,7 @@ namespace DnsServerCore.Auth
         string _ssoClientId;
         string _ssoClientSecret;
         Uri _ssoMetadataAddress;
+        IReadOnlySet<string> _ssoScopes = new HashSet<string>() { "openid", "profile", "email" };
         bool _ssoAllowSignup;
         bool _ssoAllowSignupOnlyForMappedUsers = true;
         IReadOnlyDictionary<string, string> _ssoGroupMap;
@@ -196,42 +198,50 @@ namespace DnsServerCore.Auth
 
                 string strSsoEnabled = Environment.GetEnvironmentVariable("DNS_SERVER_SSO_ENABLED");
                 if (!string.IsNullOrEmpty(strSsoEnabled))
-                    _ssoEnabled = bool.Parse(strSsoEnabled);
+                    SsoEnabled = bool.Parse(strSsoEnabled);
 
                 string strSsoAuthority = Environment.GetEnvironmentVariable("DNS_SERVER_SSO_AUTHORITY");
                 if (!string.IsNullOrEmpty(strSsoAuthority))
-                    _ssoAuthority = new Uri(strSsoAuthority);
+                    SsoAuthority = new Uri(strSsoAuthority);
 
                 string strSsoClientId = Environment.GetEnvironmentVariable("DNS_SERVER_SSO_CLIENT_ID");
                 if (!string.IsNullOrEmpty(strSsoClientId))
-                    _ssoClientId = strSsoClientId;
+                    SsoClientId = strSsoClientId;
 
                 string strSsoClientSecret = Environment.GetEnvironmentVariable("DNS_SERVER_SSO_CLIENT_SECRET");
                 string strSsoClientSecretFile = Environment.GetEnvironmentVariable("DNS_SERVER_SSO_CLIENT_SECRET_FILE");
 
                 if (!string.IsNullOrEmpty(strSsoClientSecret))
                 {
-                    _ssoClientSecret = strSsoClientSecret;
+                    SsoClientSecret = strSsoClientSecret;
                 }
                 else if (!string.IsNullOrEmpty(strSsoClientSecretFile))
                 {
                     using (StreamReader sR = new StreamReader(strSsoClientSecretFile, true))
                     {
-                        _ssoClientSecret = sR.ReadLine();
+                        SsoClientSecret = sR.ReadLine();
                     }
                 }
 
                 string strSsoMetadataAddress = Environment.GetEnvironmentVariable("DNS_SERVER_SSO_METADATA_ADDRESS");
                 if (!string.IsNullOrEmpty(strSsoMetadataAddress))
-                    _ssoMetadataAddress = new Uri(strSsoMetadataAddress);
+                    SsoMetadataAddress = new Uri(strSsoMetadataAddress);
+
+                string strSsoScopes = Environment.GetEnvironmentVariable("DNS_SERVER_SSO_SCOPES");
+                if (!string.IsNullOrEmpty(strSsoScopes))
+                {
+                    string[] ssoScopesList = strSsoScopes.Split([',', ' '], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                    if (ssoScopesList.Length > 0)
+                        SsoScopes = new HashSet<string>(ssoScopesList);
+                }
 
                 string strSsoAllowSignup = Environment.GetEnvironmentVariable("DNS_SERVER_SSO_ALLOW_SIGNUP");
                 if (!string.IsNullOrEmpty(strSsoAllowSignup))
-                    _ssoAllowSignup = bool.Parse(strSsoAllowSignup);
+                    SsoAllowSignup = bool.Parse(strSsoAllowSignup);
 
                 string strSsoAllowSignupOnlyForMappedUsers = Environment.GetEnvironmentVariable("DNS_SERVER_SSO_ALLOW_SIGNUP_ONLY_FOR_MAPPED_USERS");
                 if (!string.IsNullOrEmpty(strSsoAllowSignupOnlyForMappedUsers))
-                    _ssoAllowSignupOnlyForMappedUsers = bool.Parse(strSsoAllowSignupOnlyForMappedUsers);
+                    SsoAllowSignupOnlyForMappedUsers = bool.Parse(strSsoAllowSignupOnlyForMappedUsers);
 
                 string strGroupMap = Environment.GetEnvironmentVariable("DNS_SERVER_SSO_GROUP_MAP");
                 if (!string.IsNullOrEmpty(strGroupMap))
@@ -246,7 +256,7 @@ namespace DnsServerCore.Auth
                             groupMap.TryAdd(parts[0], parts[1]);
                     }
 
-                    _ssoGroupMap = groupMap;
+                    SsoGroupMap = groupMap;
                 }
 
                 SaveConfigFileInternal();
@@ -376,6 +386,7 @@ namespace DnsServerCore.Auth
             {
                 case 1:
                 case 2:
+                case 3:
                     {
                         int count = bR.ReadByte();
 
@@ -478,6 +489,21 @@ namespace DnsServerCore.Auth
                             restartWebService = true;
                         }
 
+                        if (version >= 3)
+                        {
+                            int count = bR.ReadByte();
+                            HashSet<string> ssoScopes = new HashSet<string>(count);
+
+                            for (int i = 0; i < count; i++)
+                                ssoScopes.Add(s.ReadShortString());
+
+                            if (!_ssoScopes.HasSameItems(ssoScopes))
+                            {
+                                _ssoScopes = ssoScopes;
+                                restartWebService = true;
+                            }
+                        }
+
                         _ssoAllowSignup = bR.ReadBoolean();
                         _ssoAllowSignupOnlyForMappedUsers = bR.ReadBoolean();
 
@@ -576,7 +602,7 @@ namespace DnsServerCore.Auth
             BinaryWriter bW = new BinaryWriter(s);
 
             bW.Write(Encoding.ASCII.GetBytes("AS")); //format
-            bW.Write((byte)2); //version
+            bW.Write((byte)3); //version
 
             bW.Write(Convert.ToByte(_groups.Count));
 
@@ -629,6 +655,18 @@ namespace DnsServerCore.Auth
                 s.WriteShortString("");
             else
                 s.WriteShortString(_ssoMetadataAddress.OriginalString);
+
+            if (_ssoScopes.Count == 0)
+            {
+                bW.Write((byte)0);
+            }
+            else
+            {
+                bW.Write(Convert.ToByte(_ssoScopes.Count));
+
+                foreach (string scope in _ssoScopes)
+                    s.WriteShortString(scope);
+            }
 
             bW.Write(_ssoAllowSignup);
             bW.Write(_ssoAllowSignupOnlyForMappedUsers);
@@ -1337,6 +1375,38 @@ namespace DnsServerCore.Auth
                 }
 
                 _ssoMetadataAddress = value;
+            }
+        }
+
+        public IReadOnlySet<string> SsoScopes
+        {
+            get { return _ssoScopes; }
+            set
+            {
+                if ((value is null) || (value.Count == 0))
+                {
+                    value = new HashSet<string>() { "openid", "profile", "email" };
+                }
+                else if (value.Count > 255)
+                {
+                    throw new ArgumentException("The SSO Scopes cannot have more than 255 entries.", nameof(SsoScopes));
+                }
+                else if (!value.Contains("openid") || !value.Contains("profile"))
+                {
+                    HashSet<string> ssoScopes = new HashSet<string>() { "openid", "profile" };
+
+                    foreach (string scope in value)
+                    {
+                        if (scope.Length > 255)
+                            throw new ArgumentException("The SSO Scope name length cannot be more than 255 chars.", nameof(SsoScopes));
+
+                        ssoScopes.Add(scope);
+                    }
+
+                    value = ssoScopes;
+                }
+
+                _ssoScopes = value;
             }
         }
 

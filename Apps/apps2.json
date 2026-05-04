@@ -1208,6 +1208,12 @@
 				"version": "4.0",
 				"url": "https://download.technitium.com/dns/apps/QueryLogsMySqlApp-v4.zip",
 				"size": "460.88 KB"
+			},
+			{
+				"serverVersion": "15.1",
+				"version": "4.1",
+				"url": "https://download.technitium.com/dns/apps/QueryLogsMySqlApp-v4.1.zip",
+				"size": "461.47 KB"
 			}
 		]
 	},
@@ -1220,6 +1226,18 @@
 				"version": "1.0",
 				"url": "https://download.technitium.com/dns/apps/QueryLogsPostgreSqlApp-v1.zip",
 				"size": "598.16 KB"
+			},
+			{
+				"serverVersion": "15.1",
+				"version": "1.1",
+				"url": "https://download.technitium.com/dns/apps/QueryLogsPostgreSqlApp-v1.1.zip",
+				"size": "599.04 KB"
+			},
+			{
+				"serverVersion": "15.1",
+				"version": "1.2",
+				"url": "https://download.technitium.com/dns/apps/QueryLogsPostgreSqlApp-v1.2.zip",
+				"size": "589 KB"
 			}
 		]
 	},
@@ -1328,6 +1346,12 @@
 				"version": "9.0",
 				"url": "https://download.technitium.com/dns/apps/QueryLogsSqliteApp-v9.zip",
 				"size": "15.93 MB"
+			},
+			{
+				"serverVersion": "15.1",
+				"version": "9.1",
+				"url": "https://download.technitium.com/dns/apps/QueryLogsSqliteApp-v9.1.zip",
+				"size": "15.93 MB"
 			}
 		]
 	},
@@ -1375,6 +1399,12 @@
 				"serverVersion": "15.0",
 				"version": "3.0",
 				"url": "https://download.technitium.com/dns/apps/QueryLogsSqlServerApp-v3.zip",
+				"size": "3.99 MB"
+			},
+			{
+				"serverVersion": "15.1",
+				"version": "3.1",
+				"url": "https://download.technitium.com/dns/apps/QueryLogsSqlServerApp-v3.1.zip",
 				"size": "3.99 MB"
 			}
 		]

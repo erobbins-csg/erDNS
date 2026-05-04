@@ -54,6 +54,7 @@ namespace QueryLogsMySql
         Thread? _consumerThread;
         const int BULK_INSERT_COUNT = 1000;
         const int BULK_INSERT_ERROR_DELAY = 10000;
+        const int BULK_REMOVE_COUNT = 10000;
 
         readonly Timer _cleanupTimer;
         const int CLEAN_UP_TIMER_INITIAL_INTERVAL = 5 * 1000;
@@ -88,25 +89,42 @@ namespace QueryLogsMySql
 
                             int recordsToRemove = totalRecords - _maxLogRecords;
                             if (recordsToRemove > 0)
-                            {
-                                await using (MySqlCommand command = connection.CreateCommand())
-                                {
-                                    command.CommandText = $"DELETE FROM dns_logs WHERE dlid IN (SELECT * FROM (SELECT dlid FROM dns_logs ORDER BY dlid LIMIT {recordsToRemove}) AS T1);";
-
-                                    await command.ExecuteNonQueryAsync();
-                                }
-                            }
+                                await BatchRemove(recordsToRemove);
                         }
 
                         if (_maxLogDays > 0)
                         {
+                            int recordsToRemove;
+
                             await using (MySqlCommand command = connection.CreateCommand())
                             {
-                                command.CommandText = "DELETE FROM dns_logs WHERE timestamp < @timestamp;";
+                                command.CommandText = "SELECT Count(*) FROM dns_logs WHERE timestamp < @timestamp;";
 
                                 command.Parameters.AddWithValue("@timestamp", DateTime.UtcNow.AddDays(_maxLogDays * -1));
 
-                                await command.ExecuteNonQueryAsync();
+                                recordsToRemove = Convert.ToInt32(await command.ExecuteScalarAsync());
+                            }
+
+                            if (recordsToRemove > 0)
+                                await BatchRemove(recordsToRemove);
+                        }
+
+                        async Task BatchRemove(int recordsToRemove)
+                        {
+                            int batchToRemove;
+
+                            while (recordsToRemove > 0)
+                            {
+                                batchToRemove = Math.Min(recordsToRemove, BULK_REMOVE_COUNT);
+
+                                await using (MySqlCommand command = connection.CreateCommand())
+                                {
+                                    command.CommandText = $"DELETE FROM dns_logs WHERE dlid IN (SELECT * FROM (SELECT dlid FROM dns_logs ORDER BY dlid LIMIT {batchToRemove}) AS T1);";
+
+                                    await command.ExecuteNonQueryAsync();
+                                }
+
+                                recordsToRemove -= batchToRemove;
                             }
                         }
                     }
@@ -631,15 +649,9 @@ CREATE TABLE IF NOT EXISTS dns_logs
                                     await ApplyConfig();
                                     return;
                                 }
-                                catch (Exception ex)
+                                catch (MySqlException ex)
                                 {
-                                    if (ex is not MySqlException ex2)
-                                    {
-                                        _dnsServer?.WriteLog(ex);
-                                        return;
-                                    }
-
-                                    switch (ex2.ErrorCode)
+                                    switch (ex.ErrorCode)
                                     {
                                         case MySqlErrorCode.UnableToConnectToHost:
                                         case MySqlErrorCode.TooManyUserConnections:
@@ -647,24 +659,30 @@ CREATE TABLE IF NOT EXISTS dns_logs
 
                                             if (retryCount < MAX_RETRIES)
                                             {
-                                                _dnsServer?.WriteLog($"Failed to connect to the database server ({ex2.ErrorCode}). Please check the app config and make sure the database server is online. Retrying in {RETRY_DELAY / 1000} seconds... (Attempt {retryCount})");
+                                                _dnsServer?.WriteLog($"Failed to connect to the database server ({ex.ErrorCode}). Please check the app config and make sure the database server is online. Retrying in {RETRY_DELAY / 1000} seconds... (Attempt {retryCount})");
                                                 _dnsServer?.WriteLog(ex);
 
                                                 await Task.Delay(RETRY_DELAY);
                                             }
                                             else
                                             {
-                                                _dnsServer?.WriteLog($"Failed to connect to the database server ({ex2.ErrorCode}) after {retryCount} retries. Please check the app config and make sure the database server is online.");
+                                                _dnsServer?.WriteLog($"Failed to connect to the database server ({ex.ErrorCode}) after {retryCount} retries. Please check the app config and make sure the database server is online.");
                                                 _dnsServer?.WriteLog(ex);
                                                 return;
                                             }
+
                                             break;
 
                                         default:
-                                            _dnsServer?.WriteLog($"Failed to connect to the database server ({ex2.ErrorCode}). Please check the app config and make sure the database server is online.");
+                                            _dnsServer?.WriteLog($"Failed to connect to the database server ({ex.ErrorCode}). Please check the app config and make sure the database server is online.");
                                             _dnsServer?.WriteLog(ex);
                                             return;
                                     }
+                                }
+                                catch (Exception ex)
+                                {
+                                    _dnsServer?.WriteLog(ex);
+                                    return;
                                 }
                             }
                         }
@@ -787,7 +805,9 @@ CREATE TABLE IF NOT EXISTS dns_logs
 
                 long totalPages = (totalEntries / entriesPerPage) + (totalEntries % entriesPerPage > 0 ? 1 : 0);
 
-                if ((pageNumber > totalPages) || (pageNumber < 0))
+                if (totalPages < 1)
+                    pageNumber = 1;
+                else if ((pageNumber > totalPages) || (pageNumber < 0))
                     pageNumber = totalPages;
 
                 long offset = (pageNumber - 1) * entriesPerPage;

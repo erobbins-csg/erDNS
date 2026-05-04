@@ -187,40 +187,40 @@ namespace DnsServerCore
                 sb.Append("# TYPE start_time gauge\n");
                 sb.Append($"start_time {Convert.ToUInt64((_dnsWebService._uptimestamp - DateTime.UnixEpoch).TotalMilliseconds)}\n");
 
-                sb.Append("# TYPE total_queries counter\n");
-                sb.Append($"total_queries {_dnsWebService._dnsServer.StatsManager.TotalQueries}\n");
+                sb.Append("# TYPE queries_total counter\n");
+                sb.Append($"queries_total {_dnsWebService._dnsServer.StatsManager.TotalQueries}\n");
 
-                sb.Append("# TYPE total_no_error counter\n");
-                sb.Append($"total_no_error {_dnsWebService._dnsServer.StatsManager.TotalNoError}\n");
+                sb.Append("# TYPE no_error_total counter\n");
+                sb.Append($"no_error_total {_dnsWebService._dnsServer.StatsManager.TotalNoError}\n");
 
-                sb.Append("# TYPE total_server_failure counter\n");
-                sb.Append($"total_server_failure {_dnsWebService._dnsServer.StatsManager.TotalServerFailure}\n");
+                sb.Append("# TYPE server_failure_total counter\n");
+                sb.Append($"server_failure_total {_dnsWebService._dnsServer.StatsManager.TotalServerFailure}\n");
 
-                sb.Append("# TYPE total_nx_domain counter\n");
-                sb.Append($"total_nx_domain {_dnsWebService._dnsServer.StatsManager.TotalNxDomain}\n");
+                sb.Append("# TYPE nx_domain_total counter\n");
+                sb.Append($"nx_domain_total {_dnsWebService._dnsServer.StatsManager.TotalNxDomain}\n");
 
-                sb.Append("# TYPE total_refused counter\n");
-                sb.Append($"total_refused {_dnsWebService._dnsServer.StatsManager.TotalRefused}\n");
-
-
-                sb.Append("# TYPE total_authoritative counter\n");
-                sb.Append($"total_authoritative {_dnsWebService._dnsServer.StatsManager.TotalAuthoritative}\n");
-
-                sb.Append("# TYPE total_recursive counter\n");
-                sb.Append($"total_recursive {_dnsWebService._dnsServer.StatsManager.TotalRecursive}\n");
-
-                sb.Append("# TYPE total_cached counter\n");
-                sb.Append($"total_cached {_dnsWebService._dnsServer.StatsManager.TotalCached}\n");
-
-                sb.Append("# TYPE total_blocked counter\n");
-                sb.Append($"total_blocked {_dnsWebService._dnsServer.StatsManager.TotalBlocked}\n");
-
-                sb.Append("# TYPE total_dropped counter\n");
-                sb.Append($"total_dropped {_dnsWebService._dnsServer.StatsManager.TotalDropped}\n");
+                sb.Append("# TYPE refused_total counter\n");
+                sb.Append($"refused_total {_dnsWebService._dnsServer.StatsManager.TotalRefused}\n");
 
 
-                sb.Append("# TYPE total_clients counter\n");
-                sb.Append($"total_clients {_dnsWebService._dnsServer.StatsManager.TotalClients}\n");
+                sb.Append("# TYPE authoritative_total counter\n");
+                sb.Append($"authoritative_total {_dnsWebService._dnsServer.StatsManager.TotalAuthoritative}\n");
+
+                sb.Append("# TYPE recursive_total counter\n");
+                sb.Append($"recursive_total {_dnsWebService._dnsServer.StatsManager.TotalRecursive}\n");
+
+                sb.Append("# TYPE cached_total counter\n");
+                sb.Append($"cached_total {_dnsWebService._dnsServer.StatsManager.TotalCached}\n");
+
+                sb.Append("# TYPE blocked_total counter\n");
+                sb.Append($"blocked_total {_dnsWebService._dnsServer.StatsManager.TotalBlocked}\n");
+
+                sb.Append("# TYPE dropped_total counter\n");
+                sb.Append($"dropped_total {_dnsWebService._dnsServer.StatsManager.TotalDropped}\n");
+
+
+                sb.Append("# TYPE clients_total counter\n");
+                sb.Append($"clients_total {_dnsWebService._dnsServer.StatsManager.TotalClients}\n");
 
                 byte[] data = Encoding.UTF8.GetBytes(sb.ToString());
 

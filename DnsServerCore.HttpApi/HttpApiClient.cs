@@ -221,7 +221,7 @@ namespace DnsServerCore.HttpApi
         public void UseApiToken(string token)
         {
             if (_loggedIn)
-                throw new HttpApiClientException("Already logged in. Please logout before using a different API token.");
+                throw new HttpApiClientException("Already logged in. Please create a new object to use a different API token.");
 
             _httpClient.DefaultRequestHeaders.Add("Authorization", "Bearer " + token);
             _loggedIn = true;

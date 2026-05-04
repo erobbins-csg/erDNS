@@ -2977,6 +2977,24 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                                     </div>
 
                                                     <div class="form-group">
+                                                        <label class="col-sm-3 control-label">Scopes</label>
+                                                        <div class="col-sm-7">
+                                                            <table class="table" style="margin-bottom: 0px; width: 400px;">
+                                                                <thead>
+                                                                    <tr>
+                                                                        <th>Scope Name</th>
+                                                                        <th style="width: 84px;">
+                                                                            <button type="button" class="btn btn-default" style="padding: 0px 20px;" onclick="addAdminSsoScopesRow('');">Add</button>
+                                                                        </th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody id="tableAdminSsoScopes"></tbody>
+                                                            </table>
+                                                            <div style="padding-top: 5px;">Enter the scopes to be sent to the Single Sign-On (SSO) provider. The scopes <code>openid</code> and <code>profile</code> are mandatory and will be automatically added if missing. Add the scope <code>email</code> if you want to use email address as the username for all SSO users that sign up for an account.</div>
+                                                        </div>
+                                                    </div>
+
+                                                    <div class="form-group">
                                                         <label class="col-sm-3 control-label">SSO User Sign Up</label>
                                                         <div class="col-sm-7">
                                                             <div class="checkbox">
@@ -3010,14 +3028,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                                                 </thead>
                                                                 <tbody id="tableAdminSsoGroupMap"></tbody>
                                                             </table>
-                                                            <div style="padding-top: 5px;">Map Remote Groups at Single Sign-On (SSO) provider to Local Groups for both new and existing users signed up via Single Sign-On (SSO). A SSO user's group membership will be automatically synced to the mapped Local Groups each time they log in.</div>
+                                                            <div style="padding-top: 5px;">Map Remote Groups at Single Sign-On (SSO) provider to Local Groups for both new and existing users signed up via Single Sign-On (SSO). A SSO user's group membership will be automatically synced to the mapped Local Groups each time they log in. If your SSO provider does not include group membership claim by default then you will have to add <code>group</code> or <code>roles</code> scope in the <b>Scopes</b> option above as required by the SSO provider.</div>
                                                         </div>
                                                     </div>
 
                                                     <div>
                                                         <p><b>Note!</b> The Single Sign-On (SSO) uses <code>/sso/callback</code> as the callback path. Thus, your SSO Redirect URI for this DNS Server should be <code id="lblAdminSsoRedirectUri">http://localhost:5380/sso/callback</code> which needs to be configure with the SSO provider.</p>
                                                         <p><b>Note!</b> Single Sign-On (SSO) will be enabled only when all of the required parameters are configured correctly. If SSO does not work for any reason, check the Logs section on the panel and search for related error logs.</p>
-                                                        <p><b>Note!</b> When a Single Sign-On (SSO) user sign up with the DNS Server, an account for the user is created which uses the email address as the username. If email address is not available, the preferred username is used instead. If you do not wish to use email address as the username, you can remove the 'email' scope from the SSO provider options.</p>
+                                                        <p><b>Note!</b> When a Single Sign-On (SSO) user signs up with the DNS Server, an account for the user is created which uses the email address as the username. If email address is not available, the preferred username is used instead. If you do not wish to use email address as the username, you can remove the <code>email</code> scope from the <b>Scopes</b> option above.</p>
                                                         <p><b>Note!</b> The Single Sign-On (SSO) user's Display Name and Username are managed via the SSO provider and they are automatically synced each time a user logs in.</p>
                                                         <p><b>Note!</b> When Group Map is configured, the Single Sign-On (SSO) user's group membership cannot be managed locally and any group membership changes must be configured at the SSO provider itself. SSO users need to relogin so that any group membership changes made at SSO provider are applied to their user accounts. The Group Map thus allows managing user access centrally via the SSO provider. Keep the Group Map empty if group membership management for SSO users is required to be managed via the DNS Server itself.</p>
                                                         <p><b>Note!</b> The Web Service will be automatically restarted to apply these changes thus there is no need to restart the DNS Server manually.</p>
@@ -3331,7 +3349,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                         <p>Version <span id="lblAboutVersion"></span></p>
                                         <p>Server up since <span id="lblAboutUptime"></span></p>
                                         <p style="max-width: 800px; margin: 0 auto 10px auto;">
-                                            Copyright (C) 2025  Shreyas Zare (shreyas@technitium.com)<br />
+                                            Copyright (C) 2026  Shreyas Zare (shreyas@technitium.com)<br />
                                             This program comes with ABSOLUTELY NO WARRANTY. This is free software, and you are welcome to redistribute it under certain conditions.<br />
                                         </p>
                                         <p>Source code available under <a href="https://go.technitium.com/?id=24" target="_blank">GNU General Public License v3.0</a> on <a href="https://github.com/TechnitiumSoftware/DnsServer" target="_blank"><i class="fa fa-github"></i>&nbsp;GitHub</a></p>

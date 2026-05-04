@@ -2464,7 +2464,20 @@ namespace DnsServerCore.Dns
                         if (x > 0)
                             dnsRequestBase64Url = dnsRequestBase64Url.PadRight(dnsRequestBase64Url.Length - x + 4, '=');
 
-                        using (MemoryStream mS = new MemoryStream(Convert.FromBase64String(dnsRequestBase64Url)))
+                        byte[] dnsRequestData;
+
+                        try
+                        {
+                            dnsRequestData = Convert.FromBase64String(dnsRequestBase64Url);
+                        }
+                        catch (FormatException)
+                        {
+                            response.StatusCode = 400;
+                            await response.WriteAsync("Bad Request");
+                            return;
+                        }
+
+                        using (MemoryStream mS = new MemoryStream(dnsRequestData))
                         {
                             dnsRequest = DnsDatagram.ReadFrom(mS);
                             dnsRequest.SetMetadata(new NameServerAddress(new Uri(context.Request.GetDisplayUrl()), context.GetLocalIpAddress()));
@@ -3695,7 +3708,7 @@ namespace DnsServerCore.Dns
 
             if (authResponse is not null)
             {
-                if ((authResponse.RCODE != DnsResponseCode.NoError) || (authResponse.Answer.Count > 0) || (authResponse.Authority.Count == 0) || authResponse.IsFirstAuthoritySOAOrAPP())
+                if ((authResponse.RCODE != DnsResponseCode.NoError) || (authResponse.Answer.Count > 0) || (authResponse.Authority.Count == 0) || authResponse.IsFirstAuthoritySOAOrFWDOrAPP())
                 {
                     authResponse.Tag = DnsServerResponseType.Authoritative;
                     return authResponse;

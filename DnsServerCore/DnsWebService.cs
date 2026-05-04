@@ -945,6 +945,10 @@ namespace DnsServerCore
                             {
                                 LoadConfig(stream);
                             }
+
+                            //cert may have changed so update cluster certs when restoring
+                            if (_clusterManager.ClusterInitialized)
+                                _clusterManager.UpdateSelfNodeUrlAndCertificate();
                         }
                     }
 
@@ -1624,11 +1628,9 @@ namespace DnsServerCore
                     options.ResponseMode = OpenIdConnectResponseMode.FormPost;
 
                     options.Scope.Clear();
-                    options.Scope.Add("openid");
-                    options.Scope.Add("profile");
-                    options.Scope.Add("email");
-                    options.Scope.Add("groups");
-                    options.Scope.Add("roles");
+
+                    foreach (string scope in _authManager.SsoScopes)
+                        options.Scope.Add(scope);
 
                     options.CallbackPath = new PathString("/sso/callback");
 
@@ -2712,6 +2714,10 @@ namespace DnsServerCore
 
                 //init cluster manager and load config file
                 _clusterManager = new ClusterManager(this);
+
+                //cert may have changed so update cluster certs when loading
+                if (_clusterManager.ClusterInitialized)
+                    _clusterManager.UpdateSelfNodeUrlAndCertificate();
 
                 //start web service
                 if (throwIfBindFails)

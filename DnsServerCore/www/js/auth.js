@@ -2175,6 +2175,12 @@ function loadAdminSsoConfig(responseJSON) {
     $("#txtAdminSsoClientId").val(responseJSON.response.ssoClientId);
     $("#txtAdminSsoClientSecret").val(responseJSON.response.ssoClientSecret);
     $("#txtAdminSsoMetadataAddress").val(responseJSON.response.ssoMetadataAddress);
+
+    $("#tableAdminSsoScopes").html("");
+
+    for (var i = 0; i < responseJSON.response.ssoScopes.length; i++)
+        addAdminSsoScopesRow(responseJSON.response.ssoScopes[i]);
+
     $("#chkAdminSsoAllowSignup").prop("checked", responseJSON.response.ssoAllowSignup);
     $("#chkAdminSsoAllowSignupOnlyForMappedUsers").prop("checked", responseJSON.response.ssoAllowSignupOnlyForMappedUsers);
 
@@ -2209,6 +2215,16 @@ function addAdminSsoGroupMapRow(remoteGroup, localGroup) {
     $("#tableAdminSsoGroupMap").append(tableHtmlRows);
 }
 
+function addAdminSsoScopesRow(scope) {
+    var id = Math.floor(Math.random() * 10000);
+
+    var tableHtmlRows = "<tr id=\"tableAdminSsoScopesRow" + id + "\"><td><input type=\"text\" class=\"form-control\" value=\"" + htmlEncode(scope) + "\"></td>";
+
+    tableHtmlRows += "<td><button type=\"button\" class=\"btn btn-danger\" onclick=\"$('#tableAdminSsoScopesRow" + id + "').remove();\">Delete</button></td></tr>";
+
+    $("#tableAdminSsoScopes").append(tableHtmlRows);
+}
+
 function saveAdminSsoConfig(objBtn) {
     var btn = $(objBtn);
 
@@ -2236,6 +2252,14 @@ function saveAdminSsoConfig(objBtn) {
     }
 
     var ssoMetadataAddress = $("#txtAdminSsoMetadataAddress").val();
+
+    var ssoScopes = serializeTableData($("#tableAdminSsoScopes"), 1);
+    if (ssoScopes === false)
+        return;
+
+    if (ssoScopes.length == 0)
+        ssoScopes = false;
+
     var ssoAllowSignup = $("#chkAdminSsoAllowSignup").prop("checked");
     var ssoAllowSignupOnlyForMappedUsers = $("#chkAdminSsoAllowSignupOnlyForMappedUsers").prop("checked");
 
@@ -2266,7 +2290,7 @@ function saveAdminSsoConfig(objBtn) {
         url: "api/admin/sso/set",
         token: sessionData.token,
         method: "POST",
-        data: "ssoEnabled=" + ssoEnabled + "&ssoAuthority=" + encodeURIComponent(ssoAuthority) + "&ssoClientId=" + encodeURIComponent(ssoClientId) + "&ssoClientSecret=" + encodeURIComponent(ssoClientSecret) + "&ssoMetadataAddress=" + encodeURIComponent(ssoMetadataAddress) + "&ssoAllowSignup=" + ssoAllowSignup + "&ssoAllowSignupOnlyForMappedUsers=" + ssoAllowSignupOnlyForMappedUsers + "&ssoGroupMap=" + encodeURIComponent(ssoGroupMap),
+        data: "ssoEnabled=" + ssoEnabled + "&ssoAuthority=" + encodeURIComponent(ssoAuthority) + "&ssoClientId=" + encodeURIComponent(ssoClientId) + "&ssoClientSecret=" + encodeURIComponent(ssoClientSecret) + "&ssoMetadataAddress=" + encodeURIComponent(ssoMetadataAddress) + "&ssoScopes=" + encodeURIComponent(ssoScopes) + "&ssoAllowSignup=" + ssoAllowSignup + "&ssoAllowSignupOnlyForMappedUsers=" + ssoAllowSignupOnlyForMappedUsers + "&ssoGroupMap=" + encodeURIComponent(ssoGroupMap),
         success: function (responseJSON) {
             loadAdminSsoConfig(responseJSON);
             btn.button("reset");

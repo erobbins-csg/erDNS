@@ -1,5 +1,12 @@
 # Technitium DNS Server Change Log
 
+## Version 15.1
+Release Date: 3 May 2026
+
+- Added option to allow configuring SSO Scopes as required by the SSO provider.
+- Updated Prometheus metrics API text output to use correct naming convention.
+- Multiple other minor bug fixes and improvements.
+
 ## Version 15.0.1
 Release Date: 26 April 2026
 

@@ -596,6 +596,8 @@ namespace DnsServerCore.Dns.ZoneManagers
                             if (File.Exists(listFilePath))
                                 http.DefaultRequestHeaders.IfModifiedSince = File.GetLastWriteTimeUtc(listFilePath);
 
+                            http.DefaultRequestHeaders.UserAgent.TryParseAdd("Technitium DNS Server");
+
                             HttpResponseMessage httpResponse = await http.GetAsync(listUrl);
                             switch (httpResponse.StatusCode)
                             {
