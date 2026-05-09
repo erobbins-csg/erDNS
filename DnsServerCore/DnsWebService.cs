@@ -47,6 +47,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Net;
+using System.Net.Http;
 using System.Net.Quic;
 using System.Net.Security;
 using System.Net.Sockets;
@@ -63,6 +64,7 @@ using TechnitiumLibrary.Net;
 using TechnitiumLibrary.Net.Dns;
 using TechnitiumLibrary.Net.Dns.ClientConnection;
 using TechnitiumLibrary.Net.Dns.ResourceRecords;
+using TechnitiumLibrary.Net.Http.Client;
 
 namespace DnsServerCore
 {
@@ -92,6 +94,8 @@ namespace DnsServerCore
         readonly WebServiceLogsApi _logsApi;
 
         WebApplication _webService;
+        HttpClientNetworkHandler _ssoHttpHandler;
+        HttpClient _ssoHttpClient;
 
         ClusterManager _clusterManager;
         DnsServer _dnsServer;
@@ -105,6 +109,19 @@ namespace DnsServerCore
         bool _webServiceEnableHttp3;
         bool _webServiceHttpToTlsRedirect;
         bool _webServiceUseSelfSignedTlsCertificate;
+
+        IReadOnlyCollection<NetworkAccessControl> _webServiceReverseProxyAddresses =
+            [
+                new NetworkAccessControl(IPAddress.Parse("127.0.0.0"), 8),
+                new NetworkAccessControl(IPAddress.Parse("10.0.0.0"), 8),
+                new NetworkAccessControl(IPAddress.Parse("100.64.0.0"), 10),
+                new NetworkAccessControl(IPAddress.Parse("169.254.0.0"), 16),
+                new NetworkAccessControl(IPAddress.Parse("172.16.0.0"), 12),
+                new NetworkAccessControl(IPAddress.Parse("192.168.0.0"), 16),
+                new NetworkAccessControl(IPAddress.Parse("2000::"), 3, true),
+                new NetworkAccessControl(IPAddress.IPv6Any, 0)
+            ];
+
         string _webServiceTlsCertificatePath;
         string _webServiceTlsCertificatePassword;
         string _webServiceRealIpHeader = "X-Real-IP";
@@ -451,7 +468,7 @@ namespace DnsServerCore
             BinaryReader bR = new BinaryReader(s);
 
             int version = bR.ReadByte();
-            if (version > 1)
+            if (version > 2)
                 throw new InvalidDataException("Web Service config version not supported.");
 
             _webServiceHttpPort = bR.ReadInt32();
@@ -482,6 +499,25 @@ namespace DnsServerCore
             _webServiceEnableHttp3 = bR.ReadBoolean();
             _webServiceHttpToTlsRedirect = bR.ReadBoolean();
             _webServiceUseSelfSignedTlsCertificate = bR.ReadBoolean();
+
+            if (version >= 2)
+            {
+                _webServiceReverseProxyAddresses = AuthZoneInfo.ReadNetworkACLFrom(bR);
+            }
+            else
+            {
+                _webServiceReverseProxyAddresses =
+                    [
+                        new NetworkAccessControl(IPAddress.Parse("127.0.0.0"), 8),
+                        new NetworkAccessControl(IPAddress.Parse("10.0.0.0"), 8),
+                        new NetworkAccessControl(IPAddress.Parse("100.64.0.0"), 10),
+                        new NetworkAccessControl(IPAddress.Parse("169.254.0.0"), 16),
+                        new NetworkAccessControl(IPAddress.Parse("172.16.0.0"), 12),
+                        new NetworkAccessControl(IPAddress.Parse("192.168.0.0"), 16),
+                        new NetworkAccessControl(IPAddress.Parse("2000::"), 3, true),
+                        new NetworkAccessControl(IPAddress.IPv6Any, 0)
+                    ];
+            }
 
             _webServiceTlsCertificatePath = s.ReadShortString();
             _webServiceTlsCertificatePassword = s.ReadShortString();
@@ -519,7 +555,7 @@ namespace DnsServerCore
             BinaryWriter bW = new BinaryWriter(s);
 
             bW.Write(Encoding.ASCII.GetBytes("WC")); //format
-            bW.Write((byte)1); //version
+            bW.Write((byte)2); //version
 
             bW.Write(_webServiceHttpPort);
             bW.Write(_webServiceTlsPort);
@@ -535,6 +571,8 @@ namespace DnsServerCore
             bW.Write(_webServiceEnableHttp3);
             bW.Write(_webServiceHttpToTlsRedirect);
             bW.Write(_webServiceUseSelfSignedTlsCertificate);
+
+            AuthZoneInfo.WriteNetworkACLTo(_webServiceReverseProxyAddresses, bW);
 
             if (_webServiceTlsCertificatePath is null)
                 s.WriteShortString(string.Empty);
@@ -948,7 +986,16 @@ namespace DnsServerCore
 
                             //cert may have changed so update cluster certs when restoring
                             if (_clusterManager.ClusterInitialized)
-                                _clusterManager.UpdateSelfNodeUrlAndCertificate();
+                            {
+                                try
+                                {
+                                    _clusterManager.UpdateSelfNodeUrlAndCertificate();
+                                }
+                                catch (Exception ex)
+                                {
+                                    _log.Write(ex);
+                                }
+                            }
                         }
                     }
 
@@ -1627,6 +1674,21 @@ namespace DnsServerCore
                     options.ResponseType = OpenIdConnectResponseType.Code;
                     options.ResponseMode = OpenIdConnectResponseMode.FormPost;
 
+                    _ssoHttpHandler?.Dispose();
+                    _ssoHttpClient?.Dispose();
+
+                    _ssoHttpHandler = new HttpClientNetworkHandler
+                    {
+                        Proxy = _dnsServer.Proxy,
+                        NetworkType = HttpClientNetworkHandler.GetNetworkType(_dnsServer.IPv6Mode),
+                        DnsClient = _dnsServer
+                    };
+
+                    _ssoHttpClient = new HttpClient(_ssoHttpHandler);
+
+                    options.BackchannelHttpHandler = _ssoHttpHandler;
+                    options.Backchannel = _ssoHttpClient;
+
                     options.Scope.Clear();
 
                     foreach (string scope in _authManager.SsoScopes)
@@ -1635,10 +1697,16 @@ namespace DnsServerCore
                     options.CallbackPath = new PathString("/sso/callback");
 
                     if (_authManager.SsoMetadataAddress is not null)
-                        options.ConfigurationManager = new ConfigurationManager<OpenIdConnectConfiguration>(_authManager.SsoMetadataAddress.AbsoluteUri, new OpenIdConnectConfigurationRetriever(), new HttpDocumentRetriever() { RequireHttps = false });
+                        options.ConfigurationManager = new ConfigurationManager<OpenIdConnectConfiguration>(_authManager.SsoMetadataAddress.AbsoluteUri, new OpenIdConnectConfigurationRetriever(), new HttpDocumentRetriever(_ssoHttpClient) { RequireHttps = false });
 
                     options.Events = new OpenIdConnectEvents
                     {
+                        OnRedirectToIdentityProvider = async delegate (RedirectContext context)
+                        {
+                            OpenIdConnectConfiguration configuration = await context.Options.ConfigurationManager.GetConfigurationAsync(context.HttpContext.RequestAborted);
+
+                            context.Options.GetClaimsFromUserInfoEndpoint = !string.IsNullOrEmpty(configuration.UserInfoEndpoint);
+                        },
                         OnTicketReceived = async delegate (TicketReceivedContext context)
                         {
                             context.HandleResponse();
@@ -1650,7 +1718,7 @@ namespace DnsServerCore
                         },
                         OnAuthenticationFailed = delegate (AuthenticationFailedContext context)
                         {
-                            _log.Write(context.HttpContext.GetRemoteEndPoint(_webServiceRealIpHeader), context.Exception);
+                            _log.Write(GetRemoteEndPoint(context.HttpContext), context.Exception);
 
                             context.HandleResponse();
                             context.Response.Redirect("/#error=" + Uri.EscapeDataString("SSO authentication failed. Please try again."));
@@ -1660,7 +1728,7 @@ namespace DnsServerCore
                         OnRemoteFailure = delegate (RemoteFailureContext context)
                         {
                             if (context.Failure is not null)
-                                _log.Write(context.HttpContext.GetRemoteEndPoint(_webServiceRealIpHeader), context.Failure);
+                                _log.Write(GetRemoteEndPoint(context.HttpContext), context.Failure);
 
                             context.HandleResponse();
                             context.Response.Redirect("/#error=" + Uri.EscapeDataString("SSO remote failure. Please contact your administrator."));
@@ -1737,7 +1805,7 @@ namespace DnsServerCore
                 {
                     //to allow OIDC to generate correct redirect URI for the callback
                     IPAddress remoteIP = context.Connection.RemoteIpAddress;
-                    if ((remoteIP is not null) && NetUtilities.IsPrivateIP(remoteIP))
+                    if ((remoteIP is not null) && NetworkAccessControl.IsAddressAllowed(remoteIP, _webServiceReverseProxyAddresses))
                     {
                         string strScheme = context.Request.Headers["X-Forwarded-Proto"];
                         if (!string.IsNullOrEmpty(strScheme))
@@ -1823,6 +1891,9 @@ namespace DnsServerCore
                 await _webService.DisposeAsync();
                 _webService = null;
             }
+
+            _ssoHttpHandler?.Dispose();
+            _ssoHttpClient?.Dispose();
         }
 
         private bool IsHttp2Supported()
@@ -1840,6 +1911,33 @@ namespace DnsServerCore
 
                 default:
                     return false;
+            }
+        }
+
+        private IPEndPoint GetRemoteEndPoint(HttpContext context)
+        {
+            try
+            {
+                IPAddress remoteIP = context.Connection.RemoteIpAddress;
+                if (remoteIP is null)
+                    return new IPEndPoint(IPAddress.Any, 0);
+
+                if (remoteIP.IsIPv4MappedToIPv6)
+                    remoteIP = remoteIP.MapToIPv4();
+
+                if (!string.IsNullOrEmpty(_webServiceRealIpHeader) && NetworkAccessControl.IsAddressAllowed(remoteIP, _webServiceReverseProxyAddresses))
+                {
+                    //get the real IP address of the requesting client from X-Real-IP header set in nginx proxy_pass block
+                    string xRealIp = context.Request.Headers[_webServiceRealIpHeader];
+                    if (IPAddress.TryParse(xRealIp, out IPAddress address))
+                        return new IPEndPoint(address, 0);
+                }
+
+                return new IPEndPoint(remoteIP, context.Connection.RemotePort);
+            }
+            catch
+            {
+                return new IPEndPoint(IPAddress.Any, 0);
             }
         }
 
@@ -2296,7 +2394,7 @@ namespace DnsServerCore
                         }
                         else
                         {
-                            _log.Write(context.GetRemoteEndPoint(_webServiceRealIpHeader), ex);
+                            _log.Write(GetRemoteEndPoint(context), ex);
 
                             jsonWriter.WriteString("status", "error");
                             jsonWriter.WriteString("errorMessage", ex.Message);
@@ -2356,7 +2454,7 @@ namespace DnsServerCore
                     return false;
                 }
 
-                IPEndPoint remoteEP = context.GetRemoteEndPoint(_webServiceRealIpHeader);
+                IPEndPoint remoteEP = GetRemoteEndPoint(context);
 
                 session.UpdateLastSeen(remoteEP.Address, request.Headers.UserAgent);
             }
@@ -2717,7 +2815,16 @@ namespace DnsServerCore
 
                 //cert may have changed so update cluster certs when loading
                 if (_clusterManager.ClusterInitialized)
-                    _clusterManager.UpdateSelfNodeUrlAndCertificate();
+                {
+                    try
+                    {
+                        _clusterManager.UpdateSelfNodeUrlAndCertificate();
+                    }
+                    catch (Exception ex)
+                    {
+                        _log.Write(ex);
+                    }
+                }
 
                 //start web service
                 if (throwIfBindFails)

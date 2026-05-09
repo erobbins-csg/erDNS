@@ -130,11 +130,11 @@ namespace DnsServerCore
 
                     string strLog = "Check for update was done {updateAvailable: " + updateAvailable + "; updateVersion: " + updateVersion + ";}";
 
-                    _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), strLog);
+                    _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), strLog);
                 }
                 catch (Exception ex)
                 {
-                    _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "Check for update was done {updateAvailable: False;}\r\n" + ex.ToString());
+                    _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "Check for update was done {updateAvailable: False;}\r\n" + ex.ToString());
 
                     jsonWriter.WriteBoolean("updateAvailable", false);
                 }
@@ -424,7 +424,7 @@ namespace DnsServerCore
                         _dnsWebService._dnsServer.AuthZoneManager.ImportRecords(zoneInfo.Name, importRecords, true, false, true);
                     }
 
-                    _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] DNS Client imported record(s) for authoritative zone {server: " + server + "; zone: " + zoneInfo.DisplayName + "; type: " + type + ";}");
+                    _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] DNS Client imported record(s) for authoritative zone {server: " + server + "; zone: " + zoneInfo.DisplayName + "; type: " + type + ";}");
                 }
 
                 Utf8JsonWriter jsonWriter = context.GetCurrentJsonWriter();

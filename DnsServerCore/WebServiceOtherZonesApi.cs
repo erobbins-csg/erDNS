@@ -1,6 +1,6 @@
 ﻿/*
 Technitium DNS Server
-Copyright (C) 2025  Shreyas Zare (shreyas@technitium.com)
+Copyright (C) 2026  Shreyas Zare (shreyas@technitium.com)
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -63,7 +63,7 @@ namespace DnsServerCore
 
                 _dnsWebService._dnsServer.CacheZoneManager.Flush();
 
-                _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] Cache was flushed.");
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Cache was flushed.");
             }
 
             public void ListCachedZones(HttpContext context)
@@ -165,7 +165,7 @@ namespace DnsServerCore
                     domain = DnsClient.ConvertDomainNameToAscii(domain);
 
                 if (_dnsWebService._dnsServer.CacheZoneManager.DeleteZone(domain))
-                    _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] Cached zone was deleted: " + domain);
+                    _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Cached zone was deleted: " + domain);
             }
 
             #endregion
@@ -278,7 +278,7 @@ namespace DnsServerCore
 
                 _dnsWebService._dnsServer.AllowedZoneManager.ImportZones(allowedZonesList);
 
-                _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] Total " + allowedZonesList.Length + " zones were imported into allowed zone successfully.");
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Total " + allowedZonesList.Length + " zones were imported into allowed zone successfully.");
                 _dnsWebService._dnsServer.AllowedZoneManager.SaveZoneFile();
 
                 //trigger cluster update
@@ -321,7 +321,7 @@ namespace DnsServerCore
 
                 if (_dnsWebService._dnsServer.AllowedZoneManager.DeleteZone(domain))
                 {
-                    _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] Allowed zone was deleted: " + domain);
+                    _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Allowed zone was deleted: " + domain);
                     _dnsWebService._dnsServer.AllowedZoneManager.SaveZoneFile();
 
                     //trigger cluster update
@@ -339,7 +339,7 @@ namespace DnsServerCore
 
                 _dnsWebService._dnsServer.AllowedZoneManager.Flush();
 
-                _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] Allowed zone was flushed successfully.");
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Allowed zone was flushed successfully.");
                 _dnsWebService._dnsServer.AllowedZoneManager.SaveZoneFile();
 
                 //trigger cluster update
@@ -364,7 +364,7 @@ namespace DnsServerCore
 
                 if (_dnsWebService._dnsServer.AllowedZoneManager.AllowZone(domain))
                 {
-                    _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] Zone was allowed: " + domain);
+                    _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Zone was allowed: " + domain);
                     _dnsWebService._dnsServer.AllowedZoneManager.SaveZoneFile();
 
                     //trigger cluster update
@@ -483,7 +483,7 @@ namespace DnsServerCore
 
                 _dnsWebService._dnsServer.BlockedZoneManager.ImportZones(blockedZonesList);
 
-                _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] Total " + blockedZonesList.Length + " zones were imported into blocked zone successfully.");
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Total " + blockedZonesList.Length + " zones were imported into blocked zone successfully.");
                 _dnsWebService._dnsServer.BlockedZoneManager.SaveZoneFile();
 
                 //trigger cluster update
@@ -526,7 +526,7 @@ namespace DnsServerCore
 
                 if (_dnsWebService._dnsServer.BlockedZoneManager.DeleteZone(domain))
                 {
-                    _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] Blocked zone was deleted: " + domain);
+                    _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Blocked zone was deleted: " + domain);
                     _dnsWebService._dnsServer.BlockedZoneManager.SaveZoneFile();
 
                     //trigger cluster update
@@ -544,7 +544,7 @@ namespace DnsServerCore
 
                 _dnsWebService._dnsServer.BlockedZoneManager.Flush();
 
-                _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] Blocked zone was flushed successfully.");
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Blocked zone was flushed successfully.");
                 _dnsWebService._dnsServer.BlockedZoneManager.SaveZoneFile();
 
                 //trigger cluster update
@@ -569,7 +569,7 @@ namespace DnsServerCore
 
                 if (_dnsWebService._dnsServer.BlockedZoneManager.BlockZone(domain))
                 {
-                    _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] Domain was added to blocked zone: " + domain);
+                    _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Domain was added to blocked zone: " + domain);
                     _dnsWebService._dnsServer.BlockedZoneManager.SaveZoneFile();
 
                     //trigger cluster update

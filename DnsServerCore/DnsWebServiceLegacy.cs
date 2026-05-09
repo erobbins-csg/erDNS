@@ -122,7 +122,7 @@ namespace DnsServerCore
 
                 if (_dnsServer.EnableDnsOverUdpProxy || _dnsServer.EnableDnsOverTcpProxy || _dnsServer.EnableDnsOverHttp)
                 {
-                    _dnsServer.ReverseProxyNetworkACL =
+                    _dnsServer.DnsReverseProxyNetworkACL =
                         [
                             new NetworkAccessControl(IPAddress.Parse("127.0.0.0"), 8),
                             new NetworkAccessControl(IPAddress.Parse("10.0.0.0"), 8),
@@ -514,13 +514,13 @@ namespace DnsServerCore
 
                 if (version >= 39)
                 {
-                    _dnsServer.ReverseProxyNetworkACL = AuthZoneInfo.ReadNetworkACLFrom(bR);
+                    _dnsServer.DnsReverseProxyNetworkACL = AuthZoneInfo.ReadNetworkACLFrom(bR);
                 }
                 else
                 {
                     if (_dnsServer.EnableDnsOverUdpProxy || _dnsServer.EnableDnsOverTcpProxy || _dnsServer.EnableDnsOverHttp)
                     {
-                        _dnsServer.ReverseProxyNetworkACL =
+                        _dnsServer.DnsReverseProxyNetworkACL =
                             [
                                 new NetworkAccessControl(IPAddress.Parse("127.0.0.0"), 8),
                                 new NetworkAccessControl(IPAddress.Parse("10.0.0.0"), 8),

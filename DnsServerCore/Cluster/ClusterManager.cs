@@ -1008,11 +1008,20 @@ namespace DnsServerCore.Cluster
             _dnsWebService.DnsServer.AuthZoneManager.DeleteRecords(_clusterDomain, node.Name, DnsResourceRecordType.A);
             _dnsWebService.DnsServer.AuthZoneManager.DeleteRecords(_clusterDomain, node.Name, DnsResourceRecordType.AAAA);
 
+            //remove CNAME records if manually added by user
+            _dnsWebService.DnsServer.AuthZoneManager.DeleteRecords(_clusterDomain, node.Name, DnsResourceRecordType.CNAME);
+
             //remove PTR record
             foreach (IPAddress ipAddress in node.IPAddresses)
             {
                 string ptrDomain = Zone.GetReverseZone(ipAddress, ipAddress.AddressFamily == AddressFamily.InterNetwork ? 32 : 128);
-                _dnsWebService.DnsServer.AuthZoneManager.DeleteRecord(ptrDomain, ptrDomain, DnsResourceRecordType.PTR, new DnsPTRRecordData(node.Name));
+
+                AuthZoneInfo reverseZoneInfo = _dnsWebService.DnsServer.AuthZoneManager.FindAuthZoneInfo(ptrDomain);
+                if (reverseZoneInfo is not null)
+                {
+                    if (!reverseZoneInfo.Internal && ((reverseZoneInfo.Type == AuthZoneType.Primary) || (reverseZoneInfo.Type == AuthZoneType.Forwarder)))
+                        _dnsWebService.DnsServer.AuthZoneManager.DeleteRecord(reverseZoneInfo.Name, ptrDomain, DnsResourceRecordType.PTR, new DnsPTRRecordData(node.Name));
+                }
             }
 
             //remove TLSA DANE-EE record
@@ -1091,7 +1100,7 @@ namespace DnsServerCore.Cluster
                 AuthZoneInfo reverseZoneInfo = _dnsWebService.DnsServer.AuthZoneManager.FindAuthZoneInfo(ptrDomain);
                 if (reverseZoneInfo is not null)
                 {
-                    if (!reverseZoneInfo.Internal && (reverseZoneInfo.Type == AuthZoneType.Primary))
+                    if (!reverseZoneInfo.Internal && ((reverseZoneInfo.Type == AuthZoneType.Primary) || (reverseZoneInfo.Type == AuthZoneType.Forwarder)))
                     {
                         DnsResourceRecord ptrRecord = new DnsResourceRecord(ptrDomain, DnsResourceRecordType.PTR, DnsClass.IN, aTtl, new DnsPTRRecordData(node.Name));
 

@@ -37,6 +37,7 @@ using TechnitiumLibrary.Net;
 using TechnitiumLibrary.Net.Dns;
 using TechnitiumLibrary.Net.Dns.ClientConnection;
 using TechnitiumLibrary.Net.Dns.ResourceRecords;
+using TechnitiumLibrary.Net.Http.Client;
 using TechnitiumLibrary.Net.Proxy;
 
 namespace DnsServerCore
@@ -196,9 +197,23 @@ namespace DnsServerCore
                 jsonWriter.WriteBoolean("webServiceHttpToTlsRedirect", _dnsWebService._webServiceHttpToTlsRedirect);
                 jsonWriter.WriteBoolean("webServiceUseSelfSignedTlsCertificate", _dnsWebService._webServiceUseSelfSignedTlsCertificate);
                 jsonWriter.WriteNumber("webServiceTlsPort", _dnsWebService._webServiceTlsPort);
-                jsonWriter.WriteString("webServiceTlsCertificatePath", _dnsWebService._webServiceTlsCertificatePath);
-                jsonWriter.WriteString("webServiceTlsCertificatePassword", "************");
+
+                jsonWriter.WritePropertyName("webServiceReverseProxyAddresses");
+                {
+                    jsonWriter.WriteStartArray();
+
+                    if (_dnsWebService._webServiceReverseProxyAddresses is not null)
+                    {
+                        foreach (NetworkAccessControl nac in _dnsWebService._webServiceReverseProxyAddresses)
+                            jsonWriter.WriteStringValue(nac.ToString());
+                    }
+
+                    jsonWriter.WriteEndArray();
+                }
+
                 jsonWriter.WriteString("webServiceRealIpHeader", _dnsWebService._webServiceRealIpHeader);
+                jsonWriter.WriteString("webServiceTlsCertificatePath", _dnsWebService._webServiceTlsCertificatePath);
+                jsonWriter.WriteString("webServiceTlsCertificatePassword", string.IsNullOrEmpty(_dnsWebService._webServiceTlsCertificatePath) ? null : "************");
 
                 //optional protocols
                 jsonWriter.WriteBoolean("enableEDnsClientSubnetSourceAddress", _dnsWebService._dnsServer.EnableEDnsClientSubnetSourceAddress);
@@ -216,22 +231,22 @@ namespace DnsServerCore
                 jsonWriter.WriteNumber("dnsOverHttpsPort", _dnsWebService._dnsServer.DnsOverHttpsPort);
                 jsonWriter.WriteNumber("dnsOverQuicPort", _dnsWebService._dnsServer.DnsOverQuicPort);
 
-                jsonWriter.WritePropertyName("reverseProxyNetworkACL");
+                jsonWriter.WritePropertyName("dnsReverseProxyNetworkACL");
                 {
                     jsonWriter.WriteStartArray();
 
-                    if (_dnsWebService._dnsServer.ReverseProxyNetworkACL is not null)
+                    if (_dnsWebService._dnsServer.DnsReverseProxyNetworkACL is not null)
                     {
-                        foreach (NetworkAccessControl nac in _dnsWebService._dnsServer.ReverseProxyNetworkACL)
+                        foreach (NetworkAccessControl nac in _dnsWebService._dnsServer.DnsReverseProxyNetworkACL)
                             jsonWriter.WriteStringValue(nac.ToString());
                     }
 
                     jsonWriter.WriteEndArray();
                 }
 
-                jsonWriter.WriteString("dnsTlsCertificatePath", _dnsWebService._dnsServer.DnsTlsCertificatePath);
-                jsonWriter.WriteString("dnsTlsCertificatePassword", "************");
                 jsonWriter.WriteString("dnsOverHttpRealIpHeader", _dnsWebService._dnsServer.DnsOverHttpRealIpHeader);
+                jsonWriter.WriteString("dnsTlsCertificatePath", _dnsWebService._dnsServer.DnsTlsCertificatePath);
+                jsonWriter.WriteString("dnsTlsCertificatePassword", string.IsNullOrEmpty(_dnsWebService._dnsServer.DnsTlsCertificatePath) ? null : "************");
 
                 //tsig
                 jsonWriter.WritePropertyName("tsigKeys");
@@ -926,6 +941,27 @@ namespace DnsServerCore
                             }
                         }
 
+                        if (request.TryQueryOrFormArray("webServiceReverseProxyAddresses", NetworkAccessControl.Parse, out NetworkAccessControl[] webServiceReverseProxyAddresses))
+                        {
+                            if ((webServiceReverseProxyAddresses is null) || (webServiceReverseProxyAddresses.Length == 0))
+                                _dnsWebService._webServiceReverseProxyAddresses = null;
+                            else if (webServiceReverseProxyAddresses.Length > byte.MaxValue)
+                                throw new ArgumentOutOfRangeException("WebServiceReverseProxyAddresses", "Web Service Reverse Proxy Addresses list cannot have more than 255 entries.");
+                            else
+                                _dnsWebService._webServiceReverseProxyAddresses = webServiceReverseProxyAddresses;
+                        }
+
+                        if (request.TryGetQueryOrForm("webServiceRealIpHeader", out string webServiceRealIpHeader))
+                        {
+                            if (webServiceRealIpHeader.Length > 255)
+                                throw new ArgumentException("Web Service Real IP header name cannot exceed 255 characters.", nameof(webServiceRealIpHeader));
+
+                            if (webServiceRealIpHeader.Contains(' '))
+                                throw new ArgumentException("Web Service Real IP header name cannot contain invalid characters.", nameof(webServiceRealIpHeader));
+
+                            _dnsWebService._webServiceRealIpHeader = webServiceRealIpHeader;
+                        }
+
                         string webServiceTlsCertificatePath = request.QueryOrForm("webServiceTlsCertificatePath");
                         if (webServiceTlsCertificatePath is not null)
                         {
@@ -950,17 +986,6 @@ namespace DnsServerCore
                                     webServiceTlsCertificateChanged = true;
                                 }
                             }
-                        }
-
-                        if (request.TryGetQueryOrForm("webServiceRealIpHeader", out string webServiceRealIpHeader))
-                        {
-                            if (webServiceRealIpHeader.Length > 255)
-                                throw new ArgumentException("Web service Real IP header name cannot exceed 255 characters.", nameof(webServiceRealIpHeader));
-
-                            if (webServiceRealIpHeader.Contains(' '))
-                                throw new ArgumentException("Web service Real IP header name cannot contain invalid characters.", nameof(webServiceRealIpHeader));
-
-                            _dnsWebService._webServiceRealIpHeader = webServiceRealIpHeader;
                         }
 
                         #endregion
@@ -1093,8 +1118,13 @@ namespace DnsServerCore
                             }
                         }
 
-                        if (request.TryQueryOrFormArray("reverseProxyNetworkACL", NetworkAccessControl.Parse, out NetworkAccessControl[] reverseProxyNetworkACL))
-                            _dnsWebService._dnsServer.ReverseProxyNetworkACL = reverseProxyNetworkACL;
+                        if (request.TryQueryOrFormArray("dnsReverseProxyNetworkACL", NetworkAccessControl.Parse, out NetworkAccessControl[] dnsReverseProxyNetworkACL))
+                            _dnsWebService._dnsServer.DnsReverseProxyNetworkACL = dnsReverseProxyNetworkACL;
+                        else if (request.TryQueryOrFormArray("reverseProxyNetworkACL", NetworkAccessControl.Parse, out dnsReverseProxyNetworkACL))
+                            _dnsWebService._dnsServer.DnsReverseProxyNetworkACL = dnsReverseProxyNetworkACL;
+
+                        if (request.TryGetQueryOrForm("dnsOverHttpRealIpHeader", out string dnsOverHttpRealIpHeader))
+                            _dnsWebService._dnsServer.DnsOverHttpRealIpHeader = dnsOverHttpRealIpHeader;
 
                         string dnsTlsCertificatePath = request.QueryOrForm("dnsTlsCertificatePath");
                         if (dnsTlsCertificatePath is not null)
@@ -1122,9 +1152,6 @@ namespace DnsServerCore
                                 }
                             }
                         }
-
-                        if (request.TryGetQueryOrForm("dnsOverHttpRealIpHeader", out string dnsOverHttpRealIpHeader))
-                            _dnsWebService._dnsServer.DnsOverHttpRealIpHeader = dnsOverHttpRealIpHeader;
 
                         #endregion
 
@@ -1581,6 +1608,13 @@ namespace DnsServerCore
                             restartWebService = true;
                         }
 
+                        //update sso http handler
+                        if (_dnsWebService._ssoHttpHandler is not null)
+                        {
+                            _dnsWebService._ssoHttpHandler.Proxy = _dnsWebService._dnsServer.Proxy;
+                            _dnsWebService._ssoHttpHandler.NetworkType = HttpClientNetworkHandler.GetNetworkType(_dnsWebService._dnsServer.IPv6Mode);
+                        }
+
                         //cluster update actions
                         if (_dnsWebService._clusterManager.ClusterInitialized)
                         {
@@ -1595,7 +1629,7 @@ namespace DnsServerCore
                         _dnsWebService._log.SaveConfigFile();
                     }
 
-                    _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] DNS Settings were updated successfully.");
+                    _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] DNS Settings were updated successfully.");
 
                     //trigger cluster update
                     if (_dnsWebService._clusterManager.ClusterInitialized)
@@ -1702,7 +1736,7 @@ namespace DnsServerCore
                     }
                 }
 
-                _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] Settings backup zip file was exported.");
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Settings backup zip file was exported.");
             }
 
             public async Task RestoreSettingsAsync(HttpContext context)
@@ -1750,7 +1784,7 @@ namespace DnsServerCore
 
                             await _dnsWebService.RestoreConfigAsync(fS, authConfig, clusterConfig, webServiceSettings, dnsSettings, logSettings, zones, allowedZones, blockedZones, blockLists, apps, scopes, stats, logs, deleteExistingFiles, context.GetCurrentSession());
 
-                            _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] Settings backup zip file was restored.");
+                            _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Settings backup zip file was restored.");
                         }
                     }
                     finally
@@ -1789,7 +1823,7 @@ namespace DnsServerCore
 
                 _dnsWebService._dnsServer.BlockListZoneManager.ForceUpdateBlockLists();
 
-                _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] Block list update was triggered.");
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Block list update was triggered.");
 
                 if (_dnsWebService._clusterManager.ClusterInitialized)
                 {
@@ -1843,7 +1877,7 @@ namespace DnsServerCore
 
                 int minutes = context.Request.GetQueryOrForm("minutes", int.Parse);
 
-                _dnsWebService._dnsServer.BlockListZoneManager.TemporaryDisableBlocking(minutes, context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), sessionUser.Username);
+                _dnsWebService._dnsServer.BlockListZoneManager.TemporaryDisableBlocking(minutes, _dnsWebService.GetRemoteEndPoint(context), sessionUser.Username);
 
                 Utf8JsonWriter jsonWriter = context.GetCurrentJsonWriter();
                 jsonWriter.WriteString("temporaryDisableBlockingTill", _dnsWebService._dnsServer.BlockListZoneManager.TemporaryDisableBlockingTill);

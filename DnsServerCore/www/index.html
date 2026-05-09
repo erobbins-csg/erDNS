@@ -1445,6 +1445,22 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                                         </div>
 
                                                         <div class="form-group">
+                                                            <label for="txtWebServiceReverseProxyAddresses" class="col-sm-3 control-label">Reverse Proxy Addresses</label>
+                                                            <div class="col-sm-6">
+                                                                <textarea id="txtWebServiceReverseProxyAddresses" class="form-control" rows="5" spellcheck="false"></textarea>
+                                                            </div>
+                                                            <div class="col-sm-offset-3 col-sm-8" style="padding-top: 5px;">Configure the ACL above to define allowed reverse proxy servers such that client IP address from requests coming from these servers is read using the <b>Real IP Header</b> configured below. Enter IP addresses or network addresses one below another to allow. Add <code>!</code> character at the start to deny, e.g. <code>!192.168.10.0/24</code> will deny entire subnet. The ACL is processed in the same order its listed. If no networks match, the default policy is to deny all.</div>
+                                                        </div>
+
+                                                        <div class="form-group">
+                                                            <label for="txtWebServiceRealIpHeader" class="col-sm-3 control-label">Real IP Header</label>
+                                                            <div class="col-sm-6">
+                                                                <input type="text" class="form-control" id="txtWebServiceRealIpHeader" placeholder="X-Real-IP" maxlength="255">
+                                                            </div>
+                                                            <div class="col-sm-offset-3 col-sm-8" style="padding-top: 5px;">The HTTP header that must be used to read client's actual IP address when the request comes from a reverse proxy whose IP address is allowed in <b>Reverse Proxy Addresses</b> ACL above.</div>
+                                                        </div>
+
+                                                        <div class="form-group">
                                                             <label for="txtWebServiceTlsCertificatePath" class="col-sm-3 control-label">TLS Certificate File Path</label>
                                                             <div class="col-sm-6">
                                                                 <input type="text" class="form-control" id="txtWebServiceTlsCertificatePath" placeholder="Web Service TLS Certificate File Path On Server" maxlength="255">
@@ -1458,14 +1474,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                                                 <input type="password" class="form-control" id="txtWebServiceTlsCertificatePassword" placeholder="Web Service TLS Certificate Password" maxlength="255">
                                                             </div>
                                                             <div class="col-sm-offset-3 col-sm-8" style="padding-top: 5px;">Enter the certificate (.pfx) password, if any.</div>
-                                                        </div>
-
-                                                        <div class="form-group">
-                                                            <label for="txtWebServiceRealIpHeader" class="col-sm-3 control-label">Real IP Header</label>
-                                                            <div class="col-sm-6">
-                                                                <input type="text" class="form-control" id="txtWebServiceRealIpHeader" placeholder="X-Real-IP" maxlength="255">
-                                                            </div>
-                                                            <div class="col-sm-offset-3 col-sm-8" style="padding-top: 5px;">The HTTP header that must be used to read client's actual IP address when the request comes from a reverse proxy with a private IP address.</div>
                                                         </div>
 
                                                         <div>
@@ -1599,11 +1607,19 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                                         </div>
 
                                                         <div class="form-group">
-                                                            <label for="txtReverseProxyNetworkACL" class="col-sm-3 control-label">Reverse Proxy Network ACL</label>
+                                                            <label for="txtDnsReverseProxyNetworkACL" class="col-sm-3 control-label">Reverse Proxy Network ACL</label>
                                                             <div class="col-sm-6">
-                                                                <textarea id="txtReverseProxyNetworkACL" class="form-control" rows="5" spellcheck="false"></textarea>
+                                                                <textarea id="txtDnsReverseProxyNetworkACL" class="form-control" rows="5" spellcheck="false"></textarea>
                                                             </div>
                                                             <div class="col-sm-offset-3 col-sm-8" style="padding-top: 5px;">Configure the ACL above to allow requests coming from your reverse proxy server for DNS-over-UDP-PROXY, DNS-over-TCP-PROXY, and DNS-over-HTTP protocols. Enter IP addresses or network addresses one below another to allow access. Add <code>!</code> character at the start to deny access, e.g. <code>!192.168.10.0/24</code> will deny entire subnet. The ACL is processed in the same order its listed. If no networks match, the default policy is to deny all.</div>
+                                                        </div>
+
+                                                        <div class="form-group">
+                                                            <label for="txtDnsOverHttpRealIpHeader" class="col-sm-3 control-label">Real IP Header</label>
+                                                            <div class="col-sm-6">
+                                                                <input type="text" class="form-control" id="txtDnsOverHttpRealIpHeader" placeholder="X-Real-IP" maxlength="255">
+                                                            </div>
+                                                            <div class="col-sm-offset-3 col-sm-8" style="padding-top: 5px;">The HTTP header that must be used to read client's actual IP address when the request comes from a reverse proxy. The specified header will be read only when the request IP address is allowed by the <b>Reverse Proxy Network ACL</b>.</div>
                                                         </div>
 
                                                         <div class="form-group">
@@ -1620,14 +1636,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                                                 <input type="password" class="form-control" id="txtDnsTlsCertificatePassword" placeholder="DNS Service TLS Certificate Password" maxlength="255">
                                                             </div>
                                                             <div class="col-sm-offset-3 col-sm-8" style="padding-top: 5px;">Enter the certificate (.pfx) password, if any.</div>
-                                                        </div>
-
-                                                        <div class="form-group">
-                                                            <label for="txtDnsOverHttpRealIpHeader" class="col-sm-3 control-label">Real IP Header</label>
-                                                            <div class="col-sm-6">
-                                                                <input type="text" class="form-control" id="txtDnsOverHttpRealIpHeader" placeholder="X-Real-IP" maxlength="255">
-                                                            </div>
-                                                            <div class="col-sm-offset-3 col-sm-8" style="padding-top: 5px;">The HTTP header that must be used to read client's actual IP address when the request comes from a reverse proxy. The specified header will be read only when the request IP address is allowed by the <b>Reverse Proxy Network ACL</b>.</div>
                                                         </div>
 
                                                         <div>
@@ -1712,7 +1720,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                                         </div>
 
                                                         <div><b>Note!</b> Disable recursion if you wish this server to act only as authoritative name server for the configured zones.</div>
-                                                        <div style="margin-top: 10px;"><b>Note!</b> You need recursion enabled even when you have configured Forwarders in Settings and do not want the DNS Server to do recursive resolution.</div>
+                                                        <div style="margin-top: 10px;"><b>Note!</b> You need to have the above recursion option enabled even when you have configured Forwarders in Settings and do not want the DNS Server to do recursive resolution. This option is not about recursive resolution itself but about the Recursion Desired (RD) flag in the incoming DNS requests.</div>
                                                     </div>
 
                                                     <div class="well well-sm form-horizontal">
@@ -3039,7 +3047,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                                         <p><b>Note!</b> The Single Sign-On (SSO) user's Display Name and Username are managed via the SSO provider and they are automatically synced each time a user logs in.</p>
                                                         <p><b>Note!</b> When Group Map is configured, the Single Sign-On (SSO) user's group membership cannot be managed locally and any group membership changes must be configured at the SSO provider itself. SSO users need to relogin so that any group membership changes made at SSO provider are applied to their user accounts. The Group Map thus allows managing user access centrally via the SSO provider. Keep the Group Map empty if group membership management for SSO users is required to be managed via the DNS Server itself.</p>
                                                         <p><b>Note!</b> The Web Service will be automatically restarted to apply these changes thus there is no need to restart the DNS Server manually.</p>
-                                                        <p><b>Note!</b> When using a reverse proxy with the Web Service, you need to add <code>X-Forwarded-Proto</code> and <code>X-Forwarded-Host</code> headers to proxy request to allow the Web Service to correctly form the SSO Redirect URI. If the reverse proxy is setup to use a path prefix then make sure to add the <code>X-Forwarded-Prefix</code> header to proxy request too. For example, if you are using nginx as the reverse proxy with a path prefix of <code>/dns</code>, then you should add the following headers: <code>proxy_set_header X-Forwarded-Proto $scheme;</code>, <code>proxy_set_header X-Forwarded-Host $host;</code>, <code>proxy_set_header X-Forwarded-Prefix /dns;</code>, and <code>proxy_redirect / /dns/;</code></p>
+                                                        <p><b>Note!</b> When using a reverse proxy with the Web Service, you need to add <code>X-Forwarded-Proto</code> and <code>X-Forwarded-Host</code> headers to proxy request to allow the Web Service to correctly form the SSO Redirect URI. If the reverse proxy is setup to use a path prefix then make sure to add the <code>X-Forwarded-Prefix</code> header to proxy request too. These headers will be read only if the reverse proxy IP address is configured to be allowed in the <b>Reverse Proxy Addresses</b> option in Settings > Web Service section. For example, if you are using nginx as the reverse proxy with a path prefix of <code>/dns</code>, then you should add the following headers: <code>proxy_set_header X-Forwarded-Proto $scheme;</code>, <code>proxy_set_header X-Forwarded-Host $host;</code>, <code>proxy_set_header X-Forwarded-Prefix /dns;</code>, and <code>proxy_redirect / /dns/;</code></p>
                                                         <p><b>Warning!</b> All URLs configured above must use <code>https</code> URL scheme for production environments. Using <code>http</code> URL scheme is not secure and should be used only for testing purposes.</p>
                                                         <p><b>Warning!</b> Any DNS related failure may cause Single Sign-On (SSO) to fail to work making it impossible for SSO users to log in to fix the DNS issue due to circular dependency. Thus, it is recommended to maintain a local administrator user account for such scenarios.</p>
                                                     </div>

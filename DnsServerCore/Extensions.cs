@@ -25,7 +25,6 @@ using System;
 using System.Net;
 using System.Text.Json;
 using TechnitiumLibrary;
-using TechnitiumLibrary.Net;
 
 namespace DnsServerCore
 {
@@ -34,7 +33,7 @@ namespace DnsServerCore
         static readonly string[] HTTP_METHODS = new string[] { "GET", "POST" };
         static readonly char[] COMMA_SEPARATOR = new char[] { ',' };
 
-        public static IPEndPoint GetRemoteEndPoint(this HttpContext context, string realIpHeaderName = null)
+        public static IPEndPoint GetRemoteEndPoint(this HttpContext context)
         {
             try
             {
@@ -44,14 +43,6 @@ namespace DnsServerCore
 
                 if (remoteIP.IsIPv4MappedToIPv6)
                     remoteIP = remoteIP.MapToIPv4();
-
-                if (!string.IsNullOrEmpty(realIpHeaderName) && NetUtilities.IsPrivateIP(remoteIP))
-                {
-                    //get the real IP address of the requesting client from X-Real-IP header set in nginx proxy_pass block
-                    string xRealIp = context.Request.Headers[realIpHeaderName];
-                    if (IPAddress.TryParse(xRealIp, out IPAddress address))
-                        return new IPEndPoint(address, 0);
-                }
 
                 return new IPEndPoint(remoteIP, context.Connection.RemotePort);
             }

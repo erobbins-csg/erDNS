@@ -186,13 +186,13 @@ namespace DnsServerCore.Dns
         bool _enableDnsOverHttps;
         bool _enableDnsOverHttp3;
         bool _enableDnsOverQuic;
-        IReadOnlyCollection<NetworkAccessControl> _reverseProxyNetworkACL;
         int _dnsOverUdpProxyPort = 538;
         int _dnsOverTcpProxyPort = 538;
         int _dnsOverHttpPort = 80;
         int _dnsOverTlsPort = 853;
         int _dnsOverHttpsPort = 443;
         int _dnsOverQuicPort = 853;
+        IReadOnlyCollection<NetworkAccessControl> _dnsReverseProxyNetworkACL;
         string _dnsTlsCertificatePath;
         string _dnsTlsCertificatePassword;
         string _dnsOverHttpRealIpHeader = "X-Real-IP";
@@ -877,9 +877,9 @@ namespace DnsServerCore.Dns
             if (!isConfigTransfer)
                 _dnsOverQuicPort = dnsOverQuicPort;
 
-            NetworkAccessControl[] reverseProxyNetworkACL = AuthZoneInfo.ReadNetworkACLFrom(bR);
+            NetworkAccessControl[] dnsReverseProxyNetworkACL = AuthZoneInfo.ReadNetworkACLFrom(bR);
             if (!isConfigTransfer)
-                _reverseProxyNetworkACL = reverseProxyNetworkACL;
+                _dnsReverseProxyNetworkACL = dnsReverseProxyNetworkACL;
 
             string dnsTlsCertificatePath = s.ReadShortString();
             string dnsTlsCertificatePassword = s.ReadShortString();
@@ -1272,7 +1272,7 @@ namespace DnsServerCore.Dns
             bW.Write(_dnsOverHttpsPort);
             bW.Write(_dnsOverQuicPort);
 
-            AuthZoneInfo.WriteNetworkACLTo(_reverseProxyNetworkACL, bW);
+            AuthZoneInfo.WriteNetworkACLTo(_dnsReverseProxyNetworkACL, bW);
 
             if (_dnsTlsCertificatePath == null)
                 s.WriteShortString(string.Empty);
@@ -1681,7 +1681,7 @@ namespace DnsServerCore.Dns
 
                             if (protocol == DnsTransportProtocol.UdpProxy)
                             {
-                                if (!NetworkAccessControl.IsAddressAllowed(remoteEP.Address, _reverseProxyNetworkACL))
+                                if (!NetworkAccessControl.IsAddressAllowed(remoteEP.Address, _dnsReverseProxyNetworkACL))
                                 {
                                     //this feature is intended to be used with a reverse proxy or load balancer on private network
                                     continue;
@@ -1703,7 +1703,7 @@ namespace DnsServerCore.Dns
 
                             if ((protocol == DnsTransportProtocol.Udp) && _enableEDnsClientSubnetSourceAddress)
                             {
-                                if (NetworkAccessControl.IsAddressAllowed(remoteEP.Address, _reverseProxyNetworkACL))
+                                if (NetworkAccessControl.IsAddressAllowed(remoteEP.Address, _dnsReverseProxyNetworkACL))
                                 {
                                     //this feature is intended to be used with a reverse proxy or load balancer on private network
                                     EDnsClientSubnetOptionData ecs = request.GetEDnsClientSubnetOption(true);
@@ -2048,7 +2048,7 @@ namespace DnsServerCore.Dns
                         break;
 
                     case DnsTransportProtocol.TcpProxy:
-                        if (!NetworkAccessControl.IsAddressAllowed(remoteEP.Address, _reverseProxyNetworkACL))
+                        if (!NetworkAccessControl.IsAddressAllowed(remoteEP.Address, _dnsReverseProxyNetworkACL))
                         {
                             //this feature is intended to be used with a reverse proxy or load balancer on private network
                             return;
@@ -2123,7 +2123,7 @@ namespace DnsServerCore.Dns
 
                     if ((protocol == DnsTransportProtocol.Tcp) && _enableEDnsClientSubnetSourceAddress)
                     {
-                        if (NetworkAccessControl.IsAddressAllowed(remoteEP.Address, _reverseProxyNetworkACL))
+                        if (NetworkAccessControl.IsAddressAllowed(remoteEP.Address, _dnsReverseProxyNetworkACL))
                         {
                             //this feature is intended to be used with a reverse proxy or load balancer on private network
                             EDnsClientSubnetOptionData ecs = request.GetEDnsClientSubnetOption(true);
@@ -2389,7 +2389,7 @@ namespace DnsServerCore.Dns
                 HttpRequest request = context.Request;
                 HttpResponse response = context.Response;
 
-                if (NetworkAccessControl.IsAddressAllowed(remoteEP.Address, _reverseProxyNetworkACL))
+                if (NetworkAccessControl.IsAddressAllowed(remoteEP.Address, _dnsReverseProxyNetworkACL))
                 {
                     //try to get client's actual IP from X-Real-IP header, if any
                     if (!string.IsNullOrEmpty(_dnsOverHttpRealIpHeader))
@@ -2609,6 +2609,13 @@ namespace DnsServerCore.Dns
                 return new DnsDatagram(request.Identifier, true, request.OPCODE, false, false, request.RecursionDesired, isRecursionAllowed, false, request.CheckingDisabled, DnsResponseCode.FormatError, request.Question, null, null, null, request.EDNS is null ? ushort.MinValue : _udpPayloadSize, request.DnssecOk ? EDnsHeaderFlags.DNSSEC_OK : EDnsHeaderFlags.None) { Tag = DnsServerResponseType.Authoritative };
             }
 
+            //check for invalid domain name
+            foreach (DnsQuestionRecord question in request.Question)
+            {
+                if (!DnsClient.IsDomainNameValid(question.Name))
+                    return new DnsDatagram(request.Identifier, true, request.OPCODE, false, false, request.RecursionDesired, isRecursionAllowed, false, request.CheckingDisabled, DnsResponseCode.FormatError, request.Question, null, null, null, request.EDNS is null ? ushort.MinValue : _udpPayloadSize, request.DnssecOk ? EDnsHeaderFlags.DNSSEC_OK : EDnsHeaderFlags.None) { Tag = DnsServerResponseType.Authoritative };
+            }
+
             if (request.IsSigned)
             {
                 if (!request.VerifySignedRequest(_tsigKeys, out DnsDatagram unsignedRequest, out DnsDatagram errorResponse))
@@ -2701,10 +2708,10 @@ namespace DnsServerCore.Dns
             {
                 case DnsOpcode.StandardQuery:
                     if (request.Question.Count != 1)
-                        return new DnsDatagram(request.Identifier, true, DnsOpcode.StandardQuery, false, false, request.RecursionDesired, isRecursionAllowed, false, request.CheckingDisabled, DnsResponseCode.FormatError, request.Question) { Tag = DnsServerResponseType.Authoritative };
+                        return new DnsDatagram(request.Identifier, true, DnsOpcode.StandardQuery, false, false, request.RecursionDesired, isRecursionAllowed, false, request.CheckingDisabled, DnsResponseCode.FormatError, request.Question, null, null, null, request.EDNS is null ? ushort.MinValue : _udpPayloadSize, request.DnssecOk ? EDnsHeaderFlags.DNSSEC_OK : EDnsHeaderFlags.None) { Tag = DnsServerResponseType.Authoritative };
 
                     if (request.Question[0].Class != DnsClass.IN)
-                        return new DnsDatagram(request.Identifier, true, DnsOpcode.StandardQuery, false, false, request.RecursionDesired, isRecursionAllowed, false, request.CheckingDisabled, DnsResponseCode.Refused, request.Question) { Tag = DnsServerResponseType.Authoritative };
+                        return new DnsDatagram(request.Identifier, true, DnsOpcode.StandardQuery, false, false, request.RecursionDesired, isRecursionAllowed, false, request.CheckingDisabled, DnsResponseCode.Refused, request.Question, null, null, null, request.EDNS is null ? ushort.MinValue : _udpPayloadSize, request.DnssecOk ? EDnsHeaderFlags.DNSSEC_OK : EDnsHeaderFlags.None) { Tag = DnsServerResponseType.Authoritative };
 
                     try
                     {
@@ -2714,7 +2721,7 @@ namespace DnsServerCore.Dns
                         {
                             case DnsResourceRecordType.AXFR:
                                 if (protocol == DnsTransportProtocol.Udp)
-                                    return new DnsDatagram(request.Identifier, true, DnsOpcode.StandardQuery, false, false, request.RecursionDesired, false, false, request.CheckingDisabled, DnsResponseCode.FormatError, request.Question) { Tag = DnsServerResponseType.Authoritative };
+                                    return new DnsDatagram(request.Identifier, true, DnsOpcode.StandardQuery, false, false, request.RecursionDesired, false, false, request.CheckingDisabled, DnsResponseCode.FormatError, request.Question, null, null, null, request.EDNS is null ? ushort.MinValue : _udpPayloadSize, request.DnssecOk ? EDnsHeaderFlags.DNSSEC_OK : EDnsHeaderFlags.None) { Tag = DnsServerResponseType.Authoritative };
 
                                 return await ProcessZoneTransferQueryAsync(request, remoteEP, protocol, tsigAuthenticatedKeyName);
 
@@ -2723,7 +2730,7 @@ namespace DnsServerCore.Dns
 
                             case DnsResourceRecordType.FWD:
                             case DnsResourceRecordType.APP:
-                                return new DnsDatagram(request.Identifier, true, DnsOpcode.StandardQuery, false, false, request.RecursionDesired, isRecursionAllowed, false, request.CheckingDisabled, DnsResponseCode.Refused, request.Question) { Tag = DnsServerResponseType.Authoritative };
+                                return new DnsDatagram(request.Identifier, true, DnsOpcode.StandardQuery, false, false, request.RecursionDesired, isRecursionAllowed, false, request.CheckingDisabled, DnsResponseCode.Refused, request.Question, null, null, null, request.EDNS is null ? ushort.MinValue : _udpPayloadSize, request.DnssecOk ? EDnsHeaderFlags.DNSSEC_OK : EDnsHeaderFlags.None) { Tag = DnsServerResponseType.Authoritative };
                         }
 
                         //query authoritative zone
@@ -2731,28 +2738,28 @@ namespace DnsServerCore.Dns
                         if (response is not null)
                         {
                             if ((question.Type == DnsResourceRecordType.ANY) && (protocol == DnsTransportProtocol.Udp)) //force TCP for ANY request
-                                return new DnsDatagram(request.Identifier, true, DnsOpcode.StandardQuery, true, true, request.RecursionDesired, isRecursionAllowed, false, request.CheckingDisabled, response.RCODE, request.Question) { Tag = DnsServerResponseType.Authoritative };
+                                return new DnsDatagram(request.Identifier, true, DnsOpcode.StandardQuery, true, true, request.RecursionDesired, isRecursionAllowed, false, request.CheckingDisabled, response.RCODE, request.Question, null, null, null, request.EDNS is null ? ushort.MinValue : _udpPayloadSize, request.DnssecOk ? EDnsHeaderFlags.DNSSEC_OK : EDnsHeaderFlags.None) { Tag = DnsServerResponseType.Authoritative };
 
                             return response;
                         }
 
                         if (!request.RecursionDesired || !isRecursionAllowed)
-                            return new DnsDatagram(request.Identifier, true, DnsOpcode.StandardQuery, false, false, request.RecursionDesired, isRecursionAllowed, false, request.CheckingDisabled, DnsResponseCode.Refused, request.Question) { Tag = DnsServerResponseType.Authoritative };
+                            return new DnsDatagram(request.Identifier, true, DnsOpcode.StandardQuery, false, false, request.RecursionDesired, isRecursionAllowed, false, request.CheckingDisabled, DnsResponseCode.Refused, request.Question, null, null, null, request.EDNS is null ? ushort.MinValue : _udpPayloadSize, request.DnssecOk ? EDnsHeaderFlags.DNSSEC_OK : EDnsHeaderFlags.None) { Tag = DnsServerResponseType.Authoritative };
 
                         //do recursive query
                         if ((question.Type == DnsResourceRecordType.ANY) && (protocol == DnsTransportProtocol.Udp)) //force TCP for ANY request
-                            return new DnsDatagram(request.Identifier, true, DnsOpcode.StandardQuery, false, true, request.RecursionDesired, isRecursionAllowed, false, request.CheckingDisabled, DnsResponseCode.NoError, request.Question) { Tag = DnsServerResponseType.Authoritative };
+                            return new DnsDatagram(request.Identifier, true, DnsOpcode.StandardQuery, false, true, request.RecursionDesired, isRecursionAllowed, false, request.CheckingDisabled, DnsResponseCode.NoError, request.Question, null, null, null, request.EDNS is null ? ushort.MinValue : _udpPayloadSize, request.DnssecOk ? EDnsHeaderFlags.DNSSEC_OK : EDnsHeaderFlags.None) { Tag = DnsServerResponseType.Authoritative };
 
                         return await ProcessRecursiveQueryAsync(request, remoteEP, protocol, null, _dnssecValidation, false, skipDnsAppAuthoritativeRequestHandlers, clientTimeout);
                     }
                     catch (InvalidDomainNameException)
                     {
                         //format error response
-                        return new DnsDatagram(request.Identifier, true, request.OPCODE, false, false, request.RecursionDesired, isRecursionAllowed, false, request.CheckingDisabled, DnsResponseCode.FormatError, request.Question) { Tag = DnsServerResponseType.Authoritative };
+                        return new DnsDatagram(request.Identifier, true, DnsOpcode.StandardQuery, false, false, request.RecursionDesired, isRecursionAllowed, false, request.CheckingDisabled, DnsResponseCode.FormatError, request.Question, null, null, null, request.EDNS is null ? ushort.MinValue : _udpPayloadSize, request.DnssecOk ? EDnsHeaderFlags.DNSSEC_OK : EDnsHeaderFlags.None) { Tag = DnsServerResponseType.Authoritative };
                     }
                     catch (TimeoutException ex)
                     {
-                        DnsDatagram response = new DnsDatagram(request.Identifier, true, DnsOpcode.StandardQuery, false, false, request.RecursionDesired, isRecursionAllowed, false, request.CheckingDisabled, DnsResponseCode.ServerFailure, request.Question) { Tag = DnsServerResponseType.Authoritative };
+                        DnsDatagram response = new DnsDatagram(request.Identifier, true, DnsOpcode.StandardQuery, false, false, request.RecursionDesired, isRecursionAllowed, false, request.CheckingDisabled, DnsResponseCode.ServerFailure, request.Question, null, null, null, request.EDNS is null ? ushort.MinValue : _udpPayloadSize, request.DnssecOk ? EDnsHeaderFlags.DNSSEC_OK : EDnsHeaderFlags.None) { Tag = DnsServerResponseType.Authoritative };
 
                         _log.Write(remoteEP, protocol, request, response);
                         _log.Write(remoteEP, protocol, ex);
@@ -2763,7 +2770,7 @@ namespace DnsServerCore.Dns
                     {
                         _log.Write(remoteEP, protocol, ex);
 
-                        return new DnsDatagram(request.Identifier, true, DnsOpcode.StandardQuery, false, false, request.RecursionDesired, isRecursionAllowed, false, request.CheckingDisabled, DnsResponseCode.ServerFailure, request.Question) { Tag = DnsServerResponseType.Authoritative };
+                        return new DnsDatagram(request.Identifier, true, DnsOpcode.StandardQuery, false, false, request.RecursionDesired, isRecursionAllowed, false, request.CheckingDisabled, DnsResponseCode.ServerFailure, request.Question, null, null, null, request.EDNS is null ? ushort.MinValue : _udpPayloadSize, request.DnssecOk ? EDnsHeaderFlags.DNSSEC_OK : EDnsHeaderFlags.None) { Tag = DnsServerResponseType.Authoritative };
                     }
 
                 case DnsOpcode.Notify:
@@ -2773,7 +2780,7 @@ namespace DnsServerCore.Dns
                     return await ProcessUpdateQueryAsync(request, remoteEP, protocol, tsigAuthenticatedKeyName);
 
                 default:
-                    return new DnsDatagram(request.Identifier, true, request.OPCODE, false, false, request.RecursionDesired, isRecursionAllowed, false, request.CheckingDisabled, DnsResponseCode.NotImplemented, request.Question) { Tag = DnsServerResponseType.Authoritative };
+                    return new DnsDatagram(request.Identifier, true, request.OPCODE, false, false, request.RecursionDesired, isRecursionAllowed, false, request.CheckingDisabled, DnsResponseCode.NotImplemented, request.Question, null, null, null, request.EDNS is null ? ushort.MinValue : _udpPayloadSize, request.DnssecOk ? EDnsHeaderFlags.DNSSEC_OK : EDnsHeaderFlags.None) { Tag = DnsServerResponseType.Authoritative };
             }
         }
 
@@ -3055,7 +3062,6 @@ namespace DnsServerCore.Dns
                                                 prRecord.Name.Equals(record.Name, StringComparison.OrdinalIgnoreCase) &&
                                                 (prRecord.Class == record.Class) &&
                                                 (prRecord.Type == record.Type) &&
-                                                (prRecord.RDATA.RDLENGTH == record.RDATA.RDLENGTH) &&
                                                 prRecord.RDATA.Equals(record.RDATA)
                                                )
                                             {
@@ -3911,6 +3917,13 @@ namespace DnsServerCore.Dns
                     break; //loop detected
                 }
 
+                if (!DnsClient.IsDomainNameValid(cnameDomain))
+                {
+                    //do not resolve invalid domain name
+                    newResponse = new DnsDatagram(request.Identifier, true, DnsOpcode.StandardQuery, false, false, request.RecursionDesired, isRecursionAllowed, false, false, DnsResponseCode.FormatError, request.Question);
+                    break;
+                }
+
                 DnsDatagram newRequest = new DnsDatagram(0, false, DnsOpcode.StandardQuery, false, false, request.RecursionDesired, false, false, request.CheckingDisabled, DnsResponseCode.NoError, new DnsQuestionRecord[] { new DnsQuestionRecord(cnameDomain, request.Question[0].Type, request.Question[0].Class) }, null, null, null, _udpPayloadSize, request.DnssecOk ? EDnsHeaderFlags.DNSSEC_OK : EDnsHeaderFlags.None, eDnsClientSubnetOption);
 
                 //query authoritative zone first
@@ -4550,7 +4563,12 @@ namespace DnsServerCore.Dns
                         if (record.Type != DnsResourceRecordType.CNAME)
                             break; //no further CNAME records exists
 
-                        DnsDatagram newRequest = new DnsDatagram(0, false, DnsOpcode.StandardQuery, false, false, true, false, false, false, DnsResponseCode.NoError, [new DnsQuestionRecord((record.RDATA as DnsCNAMERecordData).Domain, request.Question[0].Type, request.Question[0].Class)], null, null, null, _udpPayloadSize);
+                        string cnameDomain = (record.RDATA as DnsCNAMERecordData).Domain;
+
+                        if (!DnsClient.IsDomainNameValid(cnameDomain))
+                            continue; //skip check for invalid domain
+
+                        DnsDatagram newRequest = new DnsDatagram(0, false, DnsOpcode.StandardQuery, false, false, true, false, false, false, DnsResponseCode.NoError, [new DnsQuestionRecord(cnameDomain, request.Question[0].Type, request.Question[0].Class)], null, null, null, _udpPayloadSize);
 
                         if (request.Metadata is not null)
                             newRequest.SetMetadata(request.Metadata.NameServer);
@@ -5899,6 +5917,9 @@ namespace DnsServerCore.Dns
                             //found CNAME; restart for the CNAME target
                             string cnameDomain = (lastRR.RDATA as DnsCNAMERecordData).Domain;
 
+                            if (!DnsClient.IsDomainNameValid(cnameDomain))
+                                return null; //do not refresh invalid domain name
+
                             if ((conditionalForwarderZoneCut is not null) && !cnameDomain.Equals(conditionalForwarderZoneCut, StringComparison.OrdinalIgnoreCase) && !cnameDomain.EndsWith("." + conditionalForwarderZoneCut, StringComparison.OrdinalIgnoreCase))
                             {
                                 //cname domain is in different bailiwick; reset conditional forwarders
@@ -5966,6 +5987,9 @@ namespace DnsServerCore.Dns
                     {
                         //found CNAME; restart for the CNAME target
                         string cnameDomain = (answer.RDATA as DnsCNAMERecordData).Domain;
+
+                        if (!DnsClient.IsDomainNameValid(cnameDomain))
+                            return null; //do not refresh invalid domain name
 
                         if ((conditionalForwarderZoneCut is not null) && !cnameDomain.Equals(conditionalForwarderZoneCut, StringComparison.OrdinalIgnoreCase) && !cnameDomain.EndsWith("." + conditionalForwarderZoneCut, StringComparison.OrdinalIgnoreCase))
                         {
@@ -7509,20 +7533,6 @@ namespace DnsServerCore.Dns
             set { _enableDnsOverQuic = value; }
         }
 
-        public IReadOnlyCollection<NetworkAccessControl> ReverseProxyNetworkACL
-        {
-            get { return _reverseProxyNetworkACL; }
-            set
-            {
-                if ((value is null) || (value.Count == 0))
-                    _reverseProxyNetworkACL = null;
-                else if (value.Count > byte.MaxValue)
-                    throw new ArgumentOutOfRangeException(nameof(ReverseProxyNetworkACL), "Network Access Control List cannot have more than 255 entries.");
-                else
-                    _reverseProxyNetworkACL = value;
-            }
-        }
-
         public int DnsOverUdpProxyPort
         {
             get { return _dnsOverUdpProxyPort; }
@@ -7610,6 +7620,20 @@ namespace DnsServerCore.Dns
                     throw new ArgumentOutOfRangeException(nameof(DnsOverQuicPort), "Port 53 cannot be used for DNS-over-QUIC service. Please use a different port.");
 
                 _dnsOverQuicPort = value;
+            }
+        }
+
+        public IReadOnlyCollection<NetworkAccessControl> DnsReverseProxyNetworkACL
+        {
+            get { return _dnsReverseProxyNetworkACL; }
+            set
+            {
+                if ((value is null) || (value.Count == 0))
+                    _dnsReverseProxyNetworkACL = null;
+                else if (value.Count > byte.MaxValue)
+                    throw new ArgumentOutOfRangeException(nameof(DnsReverseProxyNetworkACL), "Network Access Control List cannot have more than 255 entries.");
+                else
+                    _dnsReverseProxyNetworkACL = value;
             }
         }
 

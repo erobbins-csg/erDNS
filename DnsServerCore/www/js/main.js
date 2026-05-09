@@ -338,7 +338,7 @@ $(function () {
         var enableDnsOverHttps = $("#chkEnableDnsOverHttps").prop("checked");
 
         $("#txtDnsOverUdpProxyPort").prop("disabled", !enableDnsOverUdpProxy);
-        $("#txtReverseProxyNetworkACL").prop("disabled", !chkEnableEDnsClientSubnetSourceAddress && !enableDnsOverUdpProxy && !enableDnsOverTcpProxy && !enableDnsOverHttp && !enableDnsOverHttps);
+        $("#txtDnsReverseProxyNetworkACL").prop("disabled", !chkEnableEDnsClientSubnetSourceAddress && !enableDnsOverUdpProxy && !enableDnsOverTcpProxy && !enableDnsOverHttp && !enableDnsOverHttps);
     });
 
     $("#chkEnableDnsOverUdpProxy").on("click", function () {
@@ -349,7 +349,7 @@ $(function () {
         var enableDnsOverHttps = $("#chkEnableDnsOverHttps").prop("checked");
 
         $("#txtDnsOverUdpProxyPort").prop("disabled", !enableDnsOverUdpProxy);
-        $("#txtReverseProxyNetworkACL").prop("disabled", !chkEnableEDnsClientSubnetSourceAddress && !enableDnsOverUdpProxy && !enableDnsOverTcpProxy && !enableDnsOverHttp && !enableDnsOverHttps);
+        $("#txtDnsReverseProxyNetworkACL").prop("disabled", !chkEnableEDnsClientSubnetSourceAddress && !enableDnsOverUdpProxy && !enableDnsOverTcpProxy && !enableDnsOverHttp && !enableDnsOverHttps);
     });
 
     $("#chkEnableDnsOverTcpProxy").on("click", function () {
@@ -360,7 +360,7 @@ $(function () {
         var enableDnsOverHttps = $("#chkEnableDnsOverHttps").prop("checked");
 
         $("#txtDnsOverTcpProxyPort").prop("disabled", !enableDnsOverTcpProxy);
-        $("#txtReverseProxyNetworkACL").prop("disabled", !chkEnableEDnsClientSubnetSourceAddress && !enableDnsOverUdpProxy && !enableDnsOverTcpProxy && !enableDnsOverHttp && !enableDnsOverHttps);
+        $("#txtDnsReverseProxyNetworkACL").prop("disabled", !chkEnableEDnsClientSubnetSourceAddress && !enableDnsOverUdpProxy && !enableDnsOverTcpProxy && !enableDnsOverHttp && !enableDnsOverHttps);
     });
 
     $("#chkEnableDnsOverHttp").on("click", function () {
@@ -371,7 +371,7 @@ $(function () {
         var enableDnsOverHttps = $("#chkEnableDnsOverHttps").prop("checked");
 
         $("#txtDnsOverHttpPort").prop("disabled", !enableDnsOverHttp);
-        $("#txtReverseProxyNetworkACL").prop("disabled", !chkEnableEDnsClientSubnetSourceAddress && !enableDnsOverUdpProxy && !enableDnsOverTcpProxy && !enableDnsOverHttp && !enableDnsOverHttps);
+        $("#txtDnsReverseProxyNetworkACL").prop("disabled", !chkEnableEDnsClientSubnetSourceAddress && !enableDnsOverUdpProxy && !enableDnsOverTcpProxy && !enableDnsOverHttp && !enableDnsOverHttps);
         $("#txtDnsOverHttpRealIpHeader").prop("disabled", !enableDnsOverHttp && !enableDnsOverHttps);
     });
 
@@ -396,7 +396,7 @@ $(function () {
 
         $("#chkEnableDnsOverHttp3").prop("disabled", !enableDnsOverHttps);
         $("#txtDnsOverHttpsPort").prop("disabled", !enableDnsOverHttps);
-        $("#txtReverseProxyNetworkACL").prop("disabled", !chkEnableEDnsClientSubnetSourceAddress && !enableDnsOverUdpProxy && !enableDnsOverTcpProxy && !enableDnsOverHttp && !enableDnsOverHttps);
+        $("#txtDnsReverseProxyNetworkACL").prop("disabled", !chkEnableEDnsClientSubnetSourceAddress && !enableDnsOverUdpProxy && !enableDnsOverTcpProxy && !enableDnsOverHttp && !enableDnsOverHttps);
         $("#txtDnsTlsCertificatePath").prop("disabled", !enableDnsOverTls && !enableDnsOverHttps && !enableDnsOverQuic);
         $("#txtDnsTlsCertificatePassword").prop("disabled", !enableDnsOverTls && !enableDnsOverHttps && !enableDnsOverQuic);
         $("#txtDnsOverHttpRealIpHeader").prop("disabled", !enableDnsOverHttp && !enableDnsOverHttps);
@@ -1152,23 +1152,27 @@ function loadDnsSettings(responseJSON) {
     $("#chkWebServiceHttpToTlsRedirect").prop("disabled", !responseJSON.response.webServiceEnableTls);
     $("#chkWebServiceUseSelfSignedTlsCertificate").prop("disabled", !responseJSON.response.webServiceEnableTls);
     $("#txtWebServiceTlsPort").prop("disabled", !responseJSON.response.webServiceEnableTls);
-    $("#txtWebServiceTlsCertificatePath").prop("disabled", !responseJSON.response.webServiceEnableTls);
-    $("#txtWebServiceTlsCertificatePassword").prop("disabled", !responseJSON.response.webServiceEnableTls);
 
     $("#chkWebServiceEnableHttp3").prop("checked", responseJSON.response.webServiceEnableHttp3);
     $("#chkWebServiceHttpToTlsRedirect").prop("checked", responseJSON.response.webServiceHttpToTlsRedirect);
     $("#chkWebServiceUseSelfSignedTlsCertificate").prop("checked", responseJSON.response.webServiceUseSelfSignedTlsCertificate);
     $("#txtWebServiceTlsPort").val(responseJSON.response.webServiceTlsPort);
+
+    $("#txtWebServiceReverseProxyAddresses").val(getArrayAsString(responseJSON.response.webServiceReverseProxyAddresses));
+
+    $("#txtWebServiceRealIpHeader").val(responseJSON.response.webServiceRealIpHeader);
+    $("#lblWebServiceRealIpHeader").text(responseJSON.response.webServiceRealIpHeader);
+    $("#lblWebServiceRealIpNginx").text("proxy_set_header " + responseJSON.response.webServiceRealIpHeader + " $remote_addr;");
+
+    $("#txtWebServiceTlsCertificatePath").prop("disabled", !responseJSON.response.webServiceEnableTls);
+    $("#txtWebServiceTlsCertificatePassword").prop("disabled", !responseJSON.response.webServiceEnableTls);
+
     $("#txtWebServiceTlsCertificatePath").val(responseJSON.response.webServiceTlsCertificatePath);
 
     if (responseJSON.response.webServiceTlsCertificatePath == null)
         $("#txtWebServiceTlsCertificatePassword").val("");
     else
         $("#txtWebServiceTlsCertificatePassword").val(responseJSON.response.webServiceTlsCertificatePassword);
-
-    $("#txtWebServiceRealIpHeader").val(responseJSON.response.webServiceRealIpHeader);
-    $("#lblWebServiceRealIpHeader").text(responseJSON.response.webServiceRealIpHeader);
-    $("#lblWebServiceRealIpNginx").text("proxy_set_header " + responseJSON.response.webServiceRealIpHeader + " $remote_addr;");
 
     //optional protocols
     $("#chkEnableEDnsClientSubnetSourceAddress").prop("checked", responseJSON.response.enableEDnsClientSubnetSourceAddress);
@@ -1195,8 +1199,13 @@ function loadDnsSettings(responseJSON) {
     $("#txtDnsOverHttpsPort").val(responseJSON.response.dnsOverHttpsPort);
     $("#txtDnsOverQuicPort").val(responseJSON.response.dnsOverQuicPort);
 
-    $("#txtReverseProxyNetworkACL").prop("disabled", !responseJSON.response.enableEDnsClientSubnetSourceAddress && !responseJSON.response.enableDnsOverUdpProxy && !responseJSON.response.enableDnsOverTcpProxy && !responseJSON.response.enableDnsOverHttp && !responseJSON.response.enableDnsOverHttps);
-    $("#txtReverseProxyNetworkACL").val(getArrayAsString(responseJSON.response.reverseProxyNetworkACL));
+    $("#txtDnsReverseProxyNetworkACL").prop("disabled", !responseJSON.response.enableEDnsClientSubnetSourceAddress && !responseJSON.response.enableDnsOverUdpProxy && !responseJSON.response.enableDnsOverTcpProxy && !responseJSON.response.enableDnsOverHttp && !responseJSON.response.enableDnsOverHttps);
+    $("#txtDnsReverseProxyNetworkACL").val(getArrayAsString(responseJSON.response.dnsReverseProxyNetworkACL));
+
+    $("#txtDnsOverHttpRealIpHeader").prop("disabled", !responseJSON.response.enableDnsOverHttp && !responseJSON.response.enableDnsOverHttps);
+    $("#txtDnsOverHttpRealIpHeader").val(responseJSON.response.dnsOverHttpRealIpHeader);
+    $("#lblDnsOverHttpRealIpHeader").text(responseJSON.response.dnsOverHttpRealIpHeader);
+    $("#lblDnsOverHttpRealIpNginx").text("proxy_set_header " + responseJSON.response.dnsOverHttpRealIpHeader + " $remote_addr;");
 
     $("#txtDnsTlsCertificatePath").prop("disabled", !responseJSON.response.enableDnsOverTls && !responseJSON.response.enableDnsOverHttps && !responseJSON.response.enableDnsOverQuic);
     $("#txtDnsTlsCertificatePassword").prop("disabled", !responseJSON.response.enableDnsOverTls && !responseJSON.response.enableDnsOverHttps && !responseJSON.response.enableDnsOverQuic);
@@ -1212,11 +1221,6 @@ function loadDnsSettings(responseJSON) {
     $("#lblDoTHost").text("tls-certificate-domain:" + responseJSON.response.dnsOverTlsPort);
     $("#lblDoQHost").text("tls-certificate-domain:" + responseJSON.response.dnsOverQuicPort);
     $("#lblDoHsHost").text("tls-certificate-domain" + (responseJSON.response.dnsOverHttpsPort == 443 ? "" : ":" + responseJSON.response.dnsOverHttpsPort));
-
-    $("#txtDnsOverHttpRealIpHeader").prop("disabled", !responseJSON.response.enableDnsOverHttp && !responseJSON.response.enableDnsOverHttps);
-    $("#txtDnsOverHttpRealIpHeader").val(responseJSON.response.dnsOverHttpRealIpHeader);
-    $("#lblDnsOverHttpRealIpHeader").text(responseJSON.response.dnsOverHttpRealIpHeader);
-    $("#lblDnsOverHttpRealIpNginx").text("proxy_set_header " + responseJSON.response.dnsOverHttpRealIpHeader + " $remote_addr;");
 
     //tsig
     $("#tableTsigKeys").html("");
@@ -1701,11 +1705,20 @@ function saveDnsSettings(objBtn) {
         var webServiceHttpToTlsRedirect = $("#chkWebServiceHttpToTlsRedirect").prop("checked");
         var webServiceUseSelfSignedTlsCertificate = $("#chkWebServiceUseSelfSignedTlsCertificate").prop("checked");
         var webServiceTlsPort = $("#txtWebServiceTlsPort").val();
-        var webServiceTlsCertificatePath = $("#txtWebServiceTlsCertificatePath").val();
-        var webServiceTlsCertificatePassword = $("#txtWebServiceTlsCertificatePassword").val();
+
+        var webServiceReverseProxyAddresses = cleanTextList($("#txtWebServiceReverseProxyAddresses").val());
+
+        if ((webServiceReverseProxyAddresses.length === 0) || (webServiceReverseProxyAddresses === ","))
+            webServiceReverseProxyAddresses = false;
+        else
+            $("#txtWebServiceReverseProxyAddresses").val(webServiceReverseProxyAddresses.replace(/,/g, "\n"));
+
         var webServiceRealIpHeader = $("#txtWebServiceRealIpHeader").val();
 
-        formData += "&webServiceLocalAddresses=" + encodeURIComponent(webServiceLocalAddresses) + "&webServiceHttpPort=" + webServiceHttpPort + "&webServiceEnableTls=" + webServiceEnableTls + "&webServiceEnableHttp3=" + webServiceEnableHttp3 + "&webServiceHttpToTlsRedirect=" + webServiceHttpToTlsRedirect + "&webServiceUseSelfSignedTlsCertificate=" + webServiceUseSelfSignedTlsCertificate + "&webServiceTlsPort=" + webServiceTlsPort + "&webServiceTlsCertificatePath=" + encodeURIComponent(webServiceTlsCertificatePath) + "&webServiceTlsCertificatePassword=" + encodeURIComponent(webServiceTlsCertificatePassword) + "&webServiceRealIpHeader=" + encodeURIComponent(webServiceRealIpHeader);
+        var webServiceTlsCertificatePath = $("#txtWebServiceTlsCertificatePath").val();
+        var webServiceTlsCertificatePassword = $("#txtWebServiceTlsCertificatePassword").val();
+
+        formData += "&webServiceLocalAddresses=" + encodeURIComponent(webServiceLocalAddresses) + "&webServiceHttpPort=" + webServiceHttpPort + "&webServiceEnableTls=" + webServiceEnableTls + "&webServiceEnableHttp3=" + webServiceEnableHttp3 + "&webServiceHttpToTlsRedirect=" + webServiceHttpToTlsRedirect + "&webServiceUseSelfSignedTlsCertificate=" + webServiceUseSelfSignedTlsCertificate + "&webServiceTlsPort=" + webServiceTlsPort + "&webServiceReverseProxyAddresses=" + encodeURIComponent(webServiceReverseProxyAddresses) + "&webServiceRealIpHeader=" + encodeURIComponent(webServiceRealIpHeader) + "&webServiceTlsCertificatePath=" + encodeURIComponent(webServiceTlsCertificatePath) + "&webServiceTlsCertificatePassword=" + encodeURIComponent(webServiceTlsCertificatePassword);
     }
 
     //optional protocols
@@ -1761,19 +1774,19 @@ function saveDnsSettings(objBtn) {
             return;
         }
 
-        var reverseProxyNetworkACL = cleanTextList($("#txtReverseProxyNetworkACL").val());
+        var dnsReverseProxyNetworkACL = cleanTextList($("#txtDnsReverseProxyNetworkACL").val());
 
-        if ((reverseProxyNetworkACL.length === 0) || (reverseProxyNetworkACL === ","))
-            reverseProxyNetworkACL = false;
+        if ((dnsReverseProxyNetworkACL.length === 0) || (dnsReverseProxyNetworkACL === ","))
+            dnsReverseProxyNetworkACL = false;
         else
-            $("#txtReverseProxyNetworkACL").val(reverseProxyNetworkACL.replace(/,/g, "\n"));
+            $("#txtDnsReverseProxyNetworkACL").val(dnsReverseProxyNetworkACL.replace(/,/g, "\n"));
+
+        var dnsOverHttpRealIpHeader = $("#txtDnsOverHttpRealIpHeader").val();
 
         var dnsTlsCertificatePath = $("#txtDnsTlsCertificatePath").val();
         var dnsTlsCertificatePassword = $("#txtDnsTlsCertificatePassword").val();
 
-        var dnsOverHttpRealIpHeader = $("#txtDnsOverHttpRealIpHeader").val();
-
-        formData += "&enableEDnsClientSubnetSourceAddress=" + enableEDnsClientSubnetSourceAddress + "&enableDnsOverUdpProxy=" + enableDnsOverUdpProxy + "&enableDnsOverTcpProxy=" + enableDnsOverTcpProxy + "&enableDnsOverHttp=" + enableDnsOverHttp + "&enableDnsOverTls=" + enableDnsOverTls + "&enableDnsOverHttps=" + enableDnsOverHttps + "&enableDnsOverHttp3=" + enableDnsOverHttp3 + "&enableDnsOverQuic=" + enableDnsOverQuic + "&dnsOverUdpProxyPort=" + dnsOverUdpProxyPort + "&dnsOverTcpProxyPort=" + dnsOverTcpProxyPort + "&dnsOverHttpPort=" + dnsOverHttpPort + "&dnsOverTlsPort=" + dnsOverTlsPort + "&dnsOverHttpsPort=" + dnsOverHttpsPort + "&dnsOverQuicPort=" + dnsOverQuicPort + "&reverseProxyNetworkACL=" + encodeURIComponent(reverseProxyNetworkACL) + "&dnsTlsCertificatePath=" + encodeURIComponent(dnsTlsCertificatePath) + "&dnsTlsCertificatePassword=" + encodeURIComponent(dnsTlsCertificatePassword) + "&dnsOverHttpRealIpHeader=" + encodeURIComponent(dnsOverHttpRealIpHeader);
+        formData += "&enableEDnsClientSubnetSourceAddress=" + enableEDnsClientSubnetSourceAddress + "&enableDnsOverUdpProxy=" + enableDnsOverUdpProxy + "&enableDnsOverTcpProxy=" + enableDnsOverTcpProxy + "&enableDnsOverHttp=" + enableDnsOverHttp + "&enableDnsOverTls=" + enableDnsOverTls + "&enableDnsOverHttps=" + enableDnsOverHttps + "&enableDnsOverHttp3=" + enableDnsOverHttp3 + "&enableDnsOverQuic=" + enableDnsOverQuic + "&dnsOverUdpProxyPort=" + dnsOverUdpProxyPort + "&dnsOverTcpProxyPort=" + dnsOverTcpProxyPort + "&dnsOverHttpPort=" + dnsOverHttpPort + "&dnsOverTlsPort=" + dnsOverTlsPort + "&dnsOverHttpsPort=" + dnsOverHttpsPort + "&dnsOverQuicPort=" + dnsOverQuicPort + "&dnsReverseProxyNetworkACL=" + encodeURIComponent(dnsReverseProxyNetworkACL) + "&dnsOverHttpRealIpHeader=" + encodeURIComponent(dnsOverHttpRealIpHeader) + "&dnsTlsCertificatePath=" + encodeURIComponent(dnsTlsCertificatePath) + "&dnsTlsCertificatePassword=" + encodeURIComponent(dnsTlsCertificatePassword);
     }
 
     //tsig

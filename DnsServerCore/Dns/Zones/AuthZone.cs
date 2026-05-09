@@ -1,6 +1,6 @@
 ﻿/*
 Technitium DNS Server
-Copyright (C) 2025  Shreyas Zare (shreyas@technitium.com)
+Copyright (C) 2026  Shreyas Zare (shreyas@technitium.com)
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -327,14 +327,24 @@ namespace DnsServerCore.Dns.Zones
             _entries.AddOrUpdate(record.Type, delegate (DnsResourceRecordType key)
             {
                 added.Add(record);
-                return new DnsResourceRecord[] { record };
+                return [record];
             },
             delegate (DnsResourceRecordType key, IReadOnlyList<DnsResourceRecord> existingRecords)
             {
+                bool rdataFound = false;
+
                 foreach (DnsResourceRecord existingRecord in existingRecords)
                 {
                     if (record.RDATA.Equals(existingRecord.RDATA))
-                        return existingRecords;
+                    {
+                        //same rdata found
+                        if (record.OriginalTtlValue == existingRecord.OriginalTtlValue)
+                            return existingRecords; //exact same record exists
+
+                        //ttl value different
+                        rdataFound = true;
+                        break;
+                    }
                 }
 
                 List<DnsResourceRecord> updatedRecords = new List<DnsResourceRecord>(existingRecords.Count + 1);
@@ -355,9 +365,12 @@ namespace DnsServerCore.Dns.Zones
                     }
                 }
 
-                updatedRecords.Add(record);
+                if (!rdataFound)
+                {
+                    updatedRecords.Add(record);
+                    added.Add(record);
+                }
 
-                added.Add(record);
                 return updatedRecords;
             });
         }

@@ -249,7 +249,7 @@ namespace DnsServerCore
                 {
                     _dnsWebService._clusterManager.InitializeCluster(clusterDomain, primaryNodeIpAddresses, context.GetCurrentSession());
 
-                    _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] Cluster (" + _dnsWebService._clusterManager.ClusterDomain + ") was initialized successfully.");
+                    _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Cluster (" + _dnsWebService._clusterManager.ClusterDomain + ") was initialized successfully.");
 
                     Utf8JsonWriter jsonWriter = context.GetCurrentJsonWriter();
                     WriteClusterState(jsonWriter);
@@ -276,7 +276,7 @@ namespace DnsServerCore
                 string clusterDomain = _dnsWebService._clusterManager.ClusterDomain;
                 _dnsWebService._clusterManager.DeleteCluster(forceDelete);
 
-                _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] Cluster (" + clusterDomain + ") was deleted successfully.");
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Cluster (" + clusterDomain + ") was deleted successfully.");
 
                 Utf8JsonWriter jsonWriter = context.GetCurrentJsonWriter();
                 WriteClusterState(jsonWriter);
@@ -301,7 +301,7 @@ namespace DnsServerCore
 
                 ClusterNode secondaryNode = _dnsWebService._clusterManager.JoinCluster(secondaryNodeId, secondaryNodeUrl, secondaryNodeIpAddresses, secondaryNodeCertificate);
 
-                _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] Secondary node '" + secondaryNode.ToString() + "' joined the Cluster (" + _dnsWebService._clusterManager.ClusterDomain + ") successfully.");
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Secondary node '" + secondaryNode.ToString() + "' joined the Cluster (" + _dnsWebService._clusterManager.ClusterDomain + ") successfully.");
 
                 Utf8JsonWriter jsonWriter = context.GetCurrentJsonWriter();
                 WriteClusterState(jsonWriter);
@@ -320,7 +320,7 @@ namespace DnsServerCore
 
                 ClusterNode secondaryNode = await _dnsWebService._clusterManager.AskSecondaryNodeToLeaveClusterAsync(secondaryNodeId);
 
-                _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] Secondary node '" + secondaryNode.ToString() + "' was asked to leave the Cluster (" + _dnsWebService._clusterManager.ClusterDomain + ") successfully.");
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Secondary node '" + secondaryNode.ToString() + "' was asked to leave the Cluster (" + _dnsWebService._clusterManager.ClusterDomain + ") successfully.");
 
                 Utf8JsonWriter jsonWriter = context.GetCurrentJsonWriter();
                 WriteClusterState(jsonWriter);
@@ -339,7 +339,7 @@ namespace DnsServerCore
 
                 ClusterNode secondaryNode = _dnsWebService._clusterManager.DeleteSecondaryNode(secondaryNodeId);
 
-                _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] Secondary node '" + secondaryNode.ToString() + "' was deleted from the Cluster (" + _dnsWebService._clusterManager.ClusterDomain + ") successfully.");
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Secondary node '" + secondaryNode.ToString() + "' was deleted from the Cluster (" + _dnsWebService._clusterManager.ClusterDomain + ") successfully.");
 
                 Utf8JsonWriter jsonWriter = context.GetCurrentJsonWriter();
                 WriteClusterState(jsonWriter);
@@ -364,7 +364,7 @@ namespace DnsServerCore
 
                 ClusterNode secondaryNode = _dnsWebService._clusterManager.UpdateSecondaryNode(secondaryNodeId, secondaryNodeUrl, secondaryNodeIpAddresses, secondaryNodeCertificate);
 
-                _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] Secondary node '" + secondaryNode.ToString() + "' details were updated successfully.");
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Secondary node '" + secondaryNode.ToString() + "' details were updated successfully.");
 
                 Utf8JsonWriter jsonWriter = context.GetCurrentJsonWriter();
                 WriteClusterState(jsonWriter);
@@ -421,7 +421,7 @@ namespace DnsServerCore
                     }
                 }
 
-                _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] Server configuration was transferred successfully.");
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Server configuration was transferred successfully.");
             }
 
             public void SetClusterOptions(HttpContext context)
@@ -440,7 +440,7 @@ namespace DnsServerCore
 
                 _dnsWebService._clusterManager.UpdateClusterOptions(heartbeatRefreshIntervalSeconds, heartbeatRetryIntervalSeconds, configRefreshIntervalSeconds, configRetryIntervalSeconds);
 
-                _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] Cluster (" + _dnsWebService._clusterManager.ClusterDomain + ") options were updated successfully.");
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Cluster (" + _dnsWebService._clusterManager.ClusterDomain + ") options were updated successfully.");
 
                 Utf8JsonWriter jsonWriter = context.GetCurrentJsonWriter();
                 WriteClusterState(jsonWriter);
@@ -478,7 +478,7 @@ namespace DnsServerCore
                 {
                     await _dnsWebService._clusterManager.InitializeAndJoinClusterAsync(secondaryNodeIpAddresses, primaryNodeUrl, primaryNodeUsername, primaryNodePassword, primaryNodeTotp, primaryNodeIpAddress is null ? null : [primaryNodeIpAddress], ignoreCertificateErrors);
 
-                    _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] Joined the Cluster (" + _dnsWebService._clusterManager.ClusterDomain + ") as a Secondary node successfully.");
+                    _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Joined the Cluster (" + _dnsWebService._clusterManager.ClusterDomain + ") as a Secondary node successfully.");
 
                     Utf8JsonWriter jsonWriter = context.GetCurrentJsonWriter();
                     WriteClusterState(jsonWriter);
@@ -505,7 +505,7 @@ namespace DnsServerCore
                 string clusterDomain = _dnsWebService._clusterManager.ClusterDomain;
                 await _dnsWebService._clusterManager.LeaveClusterAsync(forceLeave);
 
-                _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] Left the Cluster (" + clusterDomain + ") successfully.");
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Left the Cluster (" + clusterDomain + ") successfully.");
 
                 Utf8JsonWriter jsonWriter = context.GetCurrentJsonWriter();
                 WriteClusterState(jsonWriter);
@@ -529,7 +529,7 @@ namespace DnsServerCore
                 //update primary node
                 ClusterNode primaryNode = await _dnsWebService._clusterManager.UpdatePrimaryNodeAsync(primaryNodeUrl, primaryNodeIpAddresses, primaryNodeId);
 
-                _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] Notification for configuration update was received. Primary node '" + primaryNode.ToString() + "' details were updated successfully.");
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Notification for configuration update was received. Primary node '" + primaryNode.ToString() + "' details were updated successfully.");
             }
 
             public void ResyncCluster(HttpContext context)
@@ -541,7 +541,7 @@ namespace DnsServerCore
 
                 _dnsWebService._clusterManager.TriggerResyncForConfig();
 
-                _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] Resync for configuration and Cluster Secondary zones was triggered successfully.");
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Resync for configuration and Cluster Secondary zones was triggered successfully.");
             }
 
             public async Task UpdatePrimaryNodeAsync(HttpContext context)
@@ -561,7 +561,7 @@ namespace DnsServerCore
                 //update primary node
                 ClusterNode primaryNode = await _dnsWebService._clusterManager.UpdatePrimaryNodeAsync(primaryNodeUrl, primaryNodeIpAddresses);
 
-                _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] Primary node '" + primaryNode.ToString() + "' details were updated successfully.");
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Primary node '" + primaryNode.ToString() + "' details were updated successfully.");
 
                 Utf8JsonWriter jsonWriter = context.GetCurrentJsonWriter();
                 WriteClusterState(jsonWriter);
@@ -581,7 +581,7 @@ namespace DnsServerCore
                 //promote to primary node
                 await _dnsWebService._clusterManager.PromoteToPrimaryNodeAsync(forceDeletePrimary);
 
-                _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] This Secondary node was promoted to be a Primary node for the Cluster successfully.");
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] This Secondary node was promoted to be a Primary node for the Cluster successfully.");
 
                 Utf8JsonWriter jsonWriter = context.GetCurrentJsonWriter();
                 WriteClusterState(jsonWriter);
@@ -602,7 +602,7 @@ namespace DnsServerCore
                 //update self node IP address
                 ClusterNode selfNode = _dnsWebService._clusterManager.UpdateSelfNodeIPAddresses(ipAddresses);
 
-                _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] " + selfNode.Type.ToString() + " node '" + selfNode.ToString() + "' IP address was updated successfully.");
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] " + selfNode.Type.ToString() + " node '" + selfNode.ToString() + "' IP address was updated successfully.");
 
                 Utf8JsonWriter jsonWriter = context.GetCurrentJsonWriter();
                 WriteClusterState(jsonWriter);

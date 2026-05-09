@@ -1628,7 +1628,7 @@ namespace DnsServerCore
                                     _dnsWebService._clusterManager.UpdateClusterRecordsFor(zoneInfo);
                             }
 
-                            _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] Authoritative Primary zone was created: " + zoneInfo.DisplayName);
+                            _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Authoritative Primary zone was created: " + zoneInfo.DisplayName);
                         }
                         break;
 
@@ -1672,7 +1672,7 @@ namespace DnsServerCore
                                 zoneInfo.OverrideCatalogPrimaryNameServers = true; //always true for secondary member zones
                             }
 
-                            _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] Authoritative Secondary zone was created: " + zoneInfo.DisplayName);
+                            _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Authoritative Secondary zone was created: " + zoneInfo.DisplayName);
                         }
                         break;
 
@@ -1706,7 +1706,7 @@ namespace DnsServerCore
                             if (catalogZoneInfo is not null)
                                 _dnsWebService._dnsServer.AuthZoneManager.AddCatalogMemberZone(catalogZoneInfo.Name, zoneInfo);
 
-                            _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] Stub zone was created: " + zoneInfo.DisplayName);
+                            _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Stub zone was created: " + zoneInfo.DisplayName);
                         }
                         break;
 
@@ -1773,7 +1773,7 @@ namespace DnsServerCore
                             if (catalogZoneInfo is not null)
                                 _dnsWebService._dnsServer.AuthZoneManager.AddCatalogMemberZone(catalogZoneInfo.Name, zoneInfo);
 
-                            _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] Forwarder zone was created: " + zoneInfo.DisplayName);
+                            _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Forwarder zone was created: " + zoneInfo.DisplayName);
                         }
                         break;
 
@@ -1796,7 +1796,7 @@ namespace DnsServerCore
                             _dnsWebService._authManager.SetPermission(PermissionSection.Zones, zoneInfo.Name, _dnsWebService._authManager.GetGroup(Group.DNS_ADMINISTRATORS), PermissionFlag.ViewModifyDelete);
                             _dnsWebService._authManager.SaveConfigFile();
 
-                            _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] Secondary Forwarder zone was created: " + zoneInfo.DisplayName);
+                            _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Secondary Forwarder zone was created: " + zoneInfo.DisplayName);
                         }
                         break;
 
@@ -1812,7 +1812,7 @@ namespace DnsServerCore
                             _dnsWebService._authManager.SetPermission(PermissionSection.Zones, zoneInfo.Name, _dnsWebService._authManager.GetGroup(Group.DNS_ADMINISTRATORS), PermissionFlag.ViewModifyDelete);
                             _dnsWebService._authManager.SaveConfigFile();
 
-                            _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] Catalog zone was created: " + zoneInfo.DisplayName);
+                            _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Catalog zone was created: " + zoneInfo.DisplayName);
                         }
                         break;
 
@@ -1835,7 +1835,7 @@ namespace DnsServerCore
                             _dnsWebService._authManager.SetPermission(PermissionSection.Zones, zoneInfo.Name, _dnsWebService._authManager.GetGroup(Group.DNS_ADMINISTRATORS), PermissionFlag.ViewModifyDelete);
                             _dnsWebService._authManager.SaveConfigFile();
 
-                            _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] Secondary Catalog zone was created: " + zoneInfo.DisplayName);
+                            _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Secondary Catalog zone was created: " + zoneInfo.DisplayName);
                         }
                         break;
 
@@ -1926,7 +1926,7 @@ namespace DnsServerCore
 
                 _dnsWebService._dnsServer.AuthZoneManager.ImportRecords(zoneInfo.Name, records, overwriteRecords, overwriteZone, overwriteSoaSerial);
 
-                _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] Total " + records.Count + " record(s) were imported successfully into " + zoneInfo.TypeName + " zone: " + zoneInfo.DisplayName);
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Total " + records.Count + " record(s) were imported successfully into " + zoneInfo.TypeName + " zone: " + zoneInfo.DisplayName);
             }
 
             public async Task ExportZoneAsync(HttpContext context)
@@ -2051,7 +2051,7 @@ namespace DnsServerCore
                 _dnsWebService._authManager.SetPermission(PermissionSection.Zones, zoneInfo.Name, _dnsWebService._authManager.GetGroup(Group.DNS_ADMINISTRATORS), PermissionFlag.ViewModifyDelete);
                 _dnsWebService._authManager.SaveConfigFile();
 
-                _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] " + sourceZoneInfo.TypeName + " zone '" + sourceZoneInfo.DisplayName + "' was cloned as '" + zoneInfo.DisplayName + "' sucessfully.");
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] " + sourceZoneInfo.TypeName + " zone '" + sourceZoneInfo.DisplayName + "' was cloned as '" + zoneInfo.DisplayName + "' sucessfully.");
             }
 
             public void ConvertZone(HttpContext context)
@@ -2084,7 +2084,7 @@ namespace DnsServerCore
 
                 _dnsWebService._dnsServer.AuthZoneManager.ConvertZoneTypeTo(zoneInfo.Name, type);
 
-                _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] " + zoneInfo.TypeName + " zone '" + zoneInfo.DisplayName + "' was converted to " + AuthZoneInfo.GetZoneTypeName(type) + " zone sucessfully.");
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] " + zoneInfo.TypeName + " zone '" + zoneInfo.DisplayName + "' was converted to " + AuthZoneInfo.GetZoneTypeName(type) + " zone sucessfully.");
             }
 
             public void SignPrimaryZone(HttpContext context)
@@ -2255,7 +2255,7 @@ namespace DnsServerCore
 
                 _dnsWebService._dnsServer.AuthZoneManager.SignPrimaryZone(zoneName, kskPrivateKey, zskPrivateKey, dnsKeyTtl, useNSEC3, iterations, saltLength);
 
-                _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] Primary zone was signed successfully: " + zoneName);
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Primary zone was signed successfully: " + zoneName);
             }
 
             public void UnsignPrimaryZone(HttpContext context)
@@ -2285,7 +2285,7 @@ namespace DnsServerCore
 
                 _dnsWebService._dnsServer.AuthZoneManager.UnsignPrimaryZone(zoneInfo.Name);
 
-                _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] Primary zone was unsigned successfully: " + zoneInfo.Name);
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Primary zone was unsigned successfully: " + zoneInfo.Name);
             }
 
             public void GetPrimaryZoneDsInfo(HttpContext context)
@@ -2476,7 +2476,7 @@ namespace DnsServerCore
 
                 _dnsWebService._dnsServer.AuthZoneManager.ConvertPrimaryZoneToNSEC(zoneName);
 
-                _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] Primary zone was converted to NSEC successfully: " + zoneName);
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Primary zone was converted to NSEC successfully: " + zoneName);
             }
 
             public void ConvertPrimaryZoneToNSEC3(HttpContext context)
@@ -2501,7 +2501,7 @@ namespace DnsServerCore
 
                 _dnsWebService._dnsServer.AuthZoneManager.ConvertPrimaryZoneToNSEC3(zoneName, iterations, saltLength);
 
-                _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] Primary zone was converted to NSEC3 successfully: " + zoneName);
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Primary zone was converted to NSEC3 successfully: " + zoneName);
             }
 
             public void UpdatePrimaryZoneNSEC3Parameters(HttpContext context)
@@ -2526,7 +2526,7 @@ namespace DnsServerCore
 
                 _dnsWebService._dnsServer.AuthZoneManager.UpdatePrimaryZoneNSEC3Parameters(zoneName, iterations, saltLength);
 
-                _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] Primary zone NSEC3 parameters were updated successfully: " + zoneName);
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Primary zone NSEC3 parameters were updated successfully: " + zoneName);
             }
 
             public void UpdatePrimaryZoneDnssecDnsKeyTtl(HttpContext context)
@@ -2550,7 +2550,7 @@ namespace DnsServerCore
 
                 _dnsWebService._dnsServer.AuthZoneManager.UpdatePrimaryZoneDnsKeyTtl(zoneName, dnsKeyTtl);
 
-                _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] Primary zone DNSKEY TTL was updated successfully: " + zoneName);
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Primary zone DNSKEY TTL was updated successfully: " + zoneName);
             }
 
             public void AddPrimaryZoneDnssecPrivateKey(HttpContext context)
@@ -2700,7 +2700,7 @@ namespace DnsServerCore
                 jsonWriter.WritePropertyName("addedDnssecPrivateKey");
                 WriteDnssecPrivateKeyAsJson(privateKey, jsonWriter);
 
-                _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] DNSSEC private key was generated and added to the primary zone successfully: " + zoneName);
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] DNSSEC private key was generated and added to the primary zone successfully: " + zoneName);
             }
 
             public void UpdatePrimaryZoneDnssecPrivateKey(HttpContext context)
@@ -2730,7 +2730,7 @@ namespace DnsServerCore
                 jsonWriter.WritePropertyName("updatedDnssecPrivateKey");
                 WriteDnssecPrivateKeyAsJson(privateKey, jsonWriter);
 
-                _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] Primary zone DNSSEC private key config was updated successfully: " + zoneName);
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Primary zone DNSSEC private key config was updated successfully: " + zoneName);
             }
 
             public void DeletePrimaryZoneDnssecPrivateKey(HttpContext context)
@@ -2754,7 +2754,7 @@ namespace DnsServerCore
 
                 _dnsWebService._dnsServer.AuthZoneManager.DeletePrimaryZoneDnssecPrivateKey(zoneName, keyTag);
 
-                _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] DNSSEC private key was deleted from primary zone successfully: " + zoneName);
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] DNSSEC private key was deleted from primary zone successfully: " + zoneName);
             }
 
             public void PublishAllGeneratedPrimaryZoneDnssecPrivateKeys(HttpContext context)
@@ -2774,7 +2774,7 @@ namespace DnsServerCore
 
                 _dnsWebService._dnsServer.AuthZoneManager.PublishAllGeneratedPrimaryZoneDnssecPrivateKeys(zoneName);
 
-                _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] All DNSSEC private keys from the primary zone were published successfully: " + zoneName);
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] All DNSSEC private keys from the primary zone were published successfully: " + zoneName);
             }
 
             public void ActivatePrimaryZoneKskDnsKey(HttpContext context)
@@ -2798,7 +2798,7 @@ namespace DnsServerCore
 
                 _dnsWebService._dnsServer.AuthZoneManager.ActivatePrimaryZoneKskDnsKey(zoneName, keyTag);
 
-                _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] The KSK DNSKEY (" + keyTag + ") from the primary zone was activated over successfully: " + zoneName);
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] The KSK DNSKEY (" + keyTag + ") from the primary zone was activated over successfully: " + zoneName);
             }
 
             public void RolloverPrimaryZoneDnsKey(HttpContext context)
@@ -2822,7 +2822,7 @@ namespace DnsServerCore
 
                 _dnsWebService._dnsServer.AuthZoneManager.RolloverPrimaryZoneDnsKey(zoneName, keyTag);
 
-                _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] The DNSKEY (" + keyTag + ") from the primary zone was rolled over successfully: " + zoneName);
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] The DNSKEY (" + keyTag + ") from the primary zone was rolled over successfully: " + zoneName);
             }
 
             public async Task RetirePrimaryZoneDnsKeyAsync(HttpContext context)
@@ -2846,7 +2846,7 @@ namespace DnsServerCore
 
                 await _dnsWebService._dnsServer.AuthZoneManager.RetirePrimaryZoneDnsKeyAsync(zoneName, keyTag);
 
-                _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] The DNSKEY (" + keyTag + ") from the primary zone was retired successfully: " + zoneName);
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] The DNSKEY (" + keyTag + ") from the primary zone was retired successfully: " + zoneName);
             }
 
             public void DeleteZone(HttpContext context)
@@ -2892,7 +2892,7 @@ namespace DnsServerCore
                 _dnsWebService._authManager.RemoveAllPermissions(PermissionSection.Zones, zoneInfo.Name);
                 _dnsWebService._authManager.SaveConfigFile();
 
-                _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] " + zoneInfo.TypeName + " zone was deleted: " + zoneInfo.DisplayName);
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] " + zoneInfo.TypeName + " zone was deleted: " + zoneInfo.DisplayName);
 
                 //delete cache for this zone to allow rebuilding cache data without using the current zone
                 _dnsWebService._dnsServer.CacheZoneManager.DeleteZone(zoneInfo.Name);
@@ -2923,7 +2923,7 @@ namespace DnsServerCore
                 zoneInfo.Disabled = false;
                 _dnsWebService._dnsServer.AuthZoneManager.SaveZoneFile(zoneInfo.Name);
 
-                _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] " + zoneInfo.TypeName + " zone was enabled: " + zoneInfo.DisplayName);
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] " + zoneInfo.TypeName + " zone was enabled: " + zoneInfo.DisplayName);
 
                 //delete cache for this zone to allow rebuilding cache data as needed by stub or forwarder zone
                 _dnsWebService._dnsServer.CacheZoneManager.DeleteZone(zoneInfo.Name);
@@ -2969,7 +2969,7 @@ namespace DnsServerCore
                 zoneInfo.Disabled = true;
                 _dnsWebService._dnsServer.AuthZoneManager.SaveZoneFile(zoneInfo.Name);
 
-                _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] " + zoneInfo.TypeName + " zone was disabled: " + zoneInfo.DisplayName);
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] " + zoneInfo.TypeName + " zone was disabled: " + zoneInfo.DisplayName);
 
                 //delete cache for this zone to allow rebuilding cache data without using the current zone
                 _dnsWebService._dnsServer.CacheZoneManager.DeleteZone(zoneInfo.Name);
@@ -3708,7 +3708,7 @@ namespace DnsServerCore
                         break;
                 }
 
-                _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] " + zoneInfo.TypeName + " zone options were updated successfully: " + zoneInfo.DisplayName);
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] " + zoneInfo.TypeName + " zone options were updated successfully: " + zoneInfo.DisplayName);
 
                 _dnsWebService._dnsServer.AuthZoneManager.SaveZoneFile(zoneInfo.Name);
             }
@@ -3810,7 +3810,7 @@ namespace DnsServerCore
                             IPAddress ipAddress;
 
                             if (strIPAddress.Equals("request-ip-address"))
-                                ipAddress = context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader).Address;
+                                ipAddress = _dnsWebService.GetRemoteEndPoint(context).Address;
                             else
                                 ipAddress = IPAddress.Parse(strIPAddress);
 
@@ -4183,7 +4183,7 @@ namespace DnsServerCore
                         UpdateSvcbAutoHints(zoneInfo.Name, domain, type == DnsResourceRecordType.A, type == DnsResourceRecordType.AAAA);
                 }
 
-                _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] New record was added to " + zoneInfo.TypeName + " zone '" + zoneInfo.DisplayName + "' successfully {record: " + newRecord.ToString() + "}");
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] New record was added to " + zoneInfo.TypeName + " zone '" + zoneInfo.DisplayName + "' successfully {record: " + newRecord.ToString() + "}");
 
                 //save zone
                 _dnsWebService._dnsServer.AuthZoneManager.SaveZoneFile(zoneInfo.Name);
@@ -4536,7 +4536,7 @@ namespace DnsServerCore
                         break;
                 }
 
-                _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] Record was deleted from " + zoneInfo.TypeName + " zone '" + zoneInfo.DisplayName + "' successfully {domain: " + domain + "; type: " + type + ";}");
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Record was deleted from " + zoneInfo.TypeName + " zone '" + zoneInfo.DisplayName + "' successfully {domain: " + domain + "; type: " + type + ";}");
 
                 _dnsWebService._dnsServer.AuthZoneManager.SaveZoneFile(zoneInfo.Name);
             }
@@ -5136,7 +5136,7 @@ namespace DnsServerCore
                         UpdateSvcbAutoHints(zoneInfo.Name, newDomain, type == DnsResourceRecordType.A, type == DnsResourceRecordType.AAAA);
                 }
 
-                _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] Record was updated for " + zoneInfo.TypeName + " zone '" + zoneInfo.DisplayName + "' successfully {" + (oldRecord is null ? "" : "oldRecord: " + oldRecord.ToString() + "; ") + "newRecord: " + newRecord.ToString() + "}");
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] Record was updated for " + zoneInfo.TypeName + " zone '" + zoneInfo.DisplayName + "' successfully {" + (oldRecord is null ? "" : "oldRecord: " + oldRecord.ToString() + "; ") + "newRecord: " + newRecord.ToString() + "}");
 
                 //save zone
                 _dnsWebService._dnsServer.AuthZoneManager.SaveZoneFile(zoneInfo.Name);

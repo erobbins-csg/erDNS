@@ -5039,8 +5039,9 @@ RESPONSE:
 ```
 {
 	"response": {
-		"version": "15.0",
-		"uptimestamp": "2025-05-31T10:28:21.6864142Z",
+		"version": "15.2",
+		"uptimestamp": "2026-05-09T10:28:36.3757654Z",
+		"clusterInitialized": false,
 		"dnsServerDomain": "server1",
 		"dnsServerLocalEndPoints": [
 			"0.0.0.0:53",
@@ -5062,8 +5063,9 @@ RESPONSE:
 		"zoneTransferAllowedNetworks": [],
 		"notifyAllowedNetworks": [],
 		"dnsAppsEnableAutomaticUpdate": true,
+		"ipv6Mode": "Disabled",
 		"preferIPv6": false,
-		"enableUdpSocketPool": false,
+		"enableUdpSocketPool": true,
 		"socketPoolExcludedPorts": [
 			53443
 		],
@@ -5112,6 +5114,8 @@ RESPONSE:
 		"quicIdleTimeout": 60000,
 		"quicMaxInboundStreams": 100,
 		"listenBacklog": 100,
+		"udpSendBufferSizeKB": 2048,
+		"udpReceiveBufferSizeKB": 2048,
 		"maxConcurrentResolutionsPerCore": 100,
 		"webServiceLocalAddresses": [
 			"[::]"
@@ -5122,9 +5126,13 @@ RESPONSE:
 		"webServiceHttpToTlsRedirect": false,
 		"webServiceUseSelfSignedTlsCertificate": true,
 		"webServiceTlsPort": 53443,
-		"webServiceTlsCertificatePath": null,
-		"webServiceTlsCertificatePassword": "************",
+		"webServiceReverseProxyAddresses": [
+			"192.168.10.2"
+		],
 		"webServiceRealIpHeader": "X-Real-IP",
+		"webServiceTlsCertificatePath": null,
+		"webServiceTlsCertificatePassword": null,
+		"enableEDnsClientSubnetSourceAddress": false,
 		"enableDnsOverUdpProxy": false,
 		"enableDnsOverTcpProxy": false,
 		"enableDnsOverHttp": false,
@@ -5138,10 +5146,10 @@ RESPONSE:
 		"dnsOverTlsPort": 853,
 		"dnsOverHttpsPort": 443,
 		"dnsOverQuicPort": 853,
-		"reverseProxyNetworkACL": [],
-		"dnsTlsCertificatePath": null,
-		"dnsTlsCertificatePassword": "************",
+		"dnsReverseProxyNetworkACL": [],
 		"dnsOverHttpRealIpHeader": "X-Real-IP",
+		"dnsTlsCertificatePath": null,
+		"dnsTlsCertificatePassword": null,
 		"tsigKeys": [
 			{
 				"keyName": "home",
@@ -5187,7 +5195,9 @@ RESPONSE:
 		"blockListUpdateIntervalHours": 24,
 		"blockListNextUpdatedOn": "2024-02-01T20:15:08.658124Z",
 		"proxy": null,
-		"forwarders": null,
+		"forwarders": [
+			"192.168.10.7"
+		],
 		"forwarderProtocol": "Udp",
 		"concurrentForwarding": true,
 		"forwarderRetries": 3,
@@ -5203,6 +5213,7 @@ RESPONSE:
 		"enableInMemoryStats": false,
 		"maxStatFileDays": 365
 	},
+	"server": "server1",
 	"status": "ok"
 }
 ```
@@ -5241,7 +5252,7 @@ WHERE:
 - `zoneTransferAllowedNetworks` (optional, cluster parameter): A comma separated list of IP addresses or network addresses that are allowed to perform zone transfer for all zones without any TSIG authentication.
 - `notifyAllowedNetworks` (optional, cluster parameter): A comma separated list of IP addresses or network addresses that are allowed to Notify all secondary zones.
 - `dnsAppsEnableAutomaticUpdate` (optional, cluster parameter): Set to `true` to allow DNS server to automatically update the DNS Apps from the DNS App Store. The DNS Server will check for updates every 24 hrs when this option is enabled.
-- `preferIPv6` (optional): DNS Server will use IPv6 for querying whenever possible with this option enabled. Initial value is `false`.
+- `ipv6Mode` (optional): Valid options are `Disabled`, `Enabled`, and `Preferred`. Initial value is `Disabled`.
 - `enableUdpSocketPool` (optional): Set this to `true` to enable UDP socket pool. The DNS Server will use UDP socket pool for all outbound DNS-over-UDP requests when enabled.
 - `socketPoolExcludedPorts` (optional): A comma separated list of port numbers that must be excluded from being used by the UDP socket pool.
 - `udpPayloadSize` (optional, cluster parameter): The maximum EDNS UDP payload size that can be used to avoid IP fragmentation. Valid range is 512-4096 bytes. Initial value is `1232`.
@@ -5262,6 +5273,8 @@ WHERE:
 - `quicIdleTimeout` (optional, cluster parameter): The time interval in milliseconds after which an idle QUIC connection will be closed. This option applies only to QUIC transport protocol. Valid range is `1000`-`90000`. Initial value is `60000`.
 - `quicMaxInboundStreams` (optional, cluster parameter): The max number of inbound bidirectional streams that can be accepted per QUIC connection. This option applies only to QUIC transport protocol. Valid range is `1`-`1000`. Initial value is `100`.
 - `listenBacklog` (optional, cluster parameter): The maximum number of pending inbound connections. This option applies to TCP, TLS, TcpProxy, and QUIC transport protocols. Initial value is `100`.
+- `udpSendBufferSizeKB` (optional): The UDP listener socket send buffer size. This option applies to UDP and UdpProxy transport protocols. Valid range is 8-65536. Initial value is 2048.
+- `udpReceiveBufferSizeKB` (optional): The UDP listener socket receive buffer size. This option applies to UDP and UdpProxy transport protocols. Valid range is 8-65536. Initial value is 2048.
 - `maxConcurrentResolutionsPerCore` (optional, cluster parameter): The maximum number of concurrent async outbound resolutions that should be done per CPU core.  Initial value is `100`.
 - `webServiceLocalAddresses` (optional): Local addresses are the network interface IP addresses you want the web service to listen for requests. 
 - `webServiceHttpPort` (optional): Specify the TCP port number for the web console and this API web service. Initial value is `5380`.
@@ -5269,13 +5282,15 @@ WHERE:
 - `webServiceEnableHttp3` (optional): Set this to `true` to enable HTTP/3 protocol for the web service.
 - `webServiceHttpToTlsRedirect` (optional): Set this option to `true` to enable HTTP to HTTPS Redirection.
 - `webServiceTlsPort` (optional): Specified the TCP port number for the web console for HTTPS access.
+- `webServiceReverseProxyAddresses` (optional):  A comma separated list of ACL entries which can be an IP address or a network address. Configure the ACL to define allowed reverse proxy servers such that client IP address from requests coming from these servers is read using the `webServiceRealIpHeader` option. Add ! character at the start to deny, e.g. !192.168.10.0/24 will deny entire subnet. The ACL is processed in the same order its listed. If no networks match, the default policy is to deny all.
 - `webServiceUseSelfSignedTlsCertificate` (optional): Set `true` for the web service to use an automatically generated self signed certificate when TLS certificate path is not specified.
 - `webServiceTlsCertificatePath` (optional): Specify a PKCS #12 certificate (.pfx) file path on the server. The certificate must contain private key. This certificate is used by the web console for HTTPS access.
 - `webServiceTlsCertificatePassword` (optional): Enter the certificate (.pfx) password, if any.
 - `webServiceRealIpHeader` (optional): The HTTP header that must be used to read client's actual IP address when the request comes from a reverse proxy with a private IP address.
-- `enableDnsOverUdpProxy` (optional): Enable this option to accept DNS-over-UDP-PROXY requests. It implements the [PROXY Protocol](https://www.haproxy.org/download/1.8/doc/proxy-protocol.txt) for both version 1 & 2 over UDP datagram. Configure the `reverseProxyNetworkACL` option to allow only requests coming from your reverse proxy server.
-- `enableDnsOverTcpProxy` (optional): Enable this option to accept DNS-over-TCP-PROXY requests. It implements the [PROXY Protocol](https://www.haproxy.org/download/1.8/doc/proxy-protocol.txt) for both version 1 & 2 over TCP connection. Configure the `reverseProxyNetworkACL` option to allow only requests coming from your reverse proxy server.
-- `enableDnsOverHttp` (optional): Enable this option to accept DNS-over-HTTP requests. It must be used with a TLS terminating reverse proxy like nginx. Configure the `reverseProxyNetworkACL` option to allow only requests coming from your reverse proxy server. Enabling this option also allows automatic TLS certificate renewal with HTTP challenge (webroot) for DNS-over-HTTPS service.
+- `enableEDnsClientSubnetSourceAddress` (optional): Enable this option to read the client's source IP address from the EDNS Client Subnet (ECS) option in the DNS requests coming via DNS-over-UDP or DNS-over-TCP protocols. This option allows a DNS proxy to pass the client's source IP address via ECS option to the DNS Server. It is mandatory to configure `dnsReverseProxyNetworkACL` to allow requests coming from your DNS proxy server to work with this option.
+- `enableDnsOverUdpProxy` (optional): Enable this option to accept DNS-over-UDP-PROXY requests. It implements the [PROXY Protocol](https://www.haproxy.org/download/1.8/doc/proxy-protocol.txt) for both version 1 & 2 over UDP datagram. Configure the `dnsReverseProxyNetworkACL` option to allow only requests coming from your reverse proxy server.
+- `enableDnsOverTcpProxy` (optional): Enable this option to accept DNS-over-TCP-PROXY requests. It implements the [PROXY Protocol](https://www.haproxy.org/download/1.8/doc/proxy-protocol.txt) for both version 1 & 2 over TCP connection. Configure the `dnsReverseProxyNetworkACL` option to allow only requests coming from your reverse proxy server.
+- `enableDnsOverHttp` (optional): Enable this option to accept DNS-over-HTTP requests. It must be used with a TLS terminating reverse proxy like nginx. Configure the `dnsReverseProxyNetworkACL` option to allow only requests coming from your reverse proxy server. Enabling this option also allows automatic TLS certificate renewal with HTTP challenge (webroot) for DNS-over-HTTPS service.
 - `enableDnsOverTls` (optional): Enable this option to accept DNS-over-TLS requests.
 - `enableDnsOverHttps` (optional): Enable this option to accept DNS-over-HTTPS requests.
 - `enableDnsOverQuic` (optional): Enable this option to accept DNS-over-QUIC requests.
@@ -5285,7 +5300,7 @@ WHERE:
 - `dnsOverTlsPort` (optional): The TCP port number for DNS-over-TLS protocol. Initial value is `853`.
 - `dnsOverHttpsPort` (optional): The TCP port number for DNS-over-HTTPS protocol. Initial value is `443`.
 - `dnsOverQuicPort` (optional): The UDP port number for DNS-over-QUIC protocol. Initial value is `853`.
-- `reverseProxyNetworkACL` (optional): Configure the ACL to allow only requests coming from your reverse proxy server for DNS-over-UDP-PROXY, DNS-over-TCP-PROXY, and DNS-over-HTTP protocols. Enter IP addresses or network addresses one below another to allow access. Add ! character at the start to deny access, e.g. !192.168.10.0/24 will deny entire subnet. The ACL is processed in the same order its listed. If no networks match, the default policy is to deny all.
+- `dnsReverseProxyNetworkACL` (optional): A comma separated list of ACL entries which can be an IP address or a network address. Configure the ACL to allow only requests coming from your reverse proxy server for DNS-over-UDP-PROXY, DNS-over-TCP-PROXY, and DNS-over-HTTP protocols. Add ! character at the start to deny access, e.g. !192.168.10.0/24 will deny entire subnet. The ACL is processed in the same order its listed. If no networks match, the default policy is to deny all.
 - `dnsTlsCertificatePath` (optional): Specify a PKCS #12 certificate (.pfx) file path on the server. The certificate must contain private key. This certificate is used by the DNS-over-TLS and DNS-over-HTTPS optional protocols.
 - `dnsTlsCertificatePassword` (optional): Enter the certificate (.pfx) password, if any.
 - `dnsOverHttpRealIpHeader` (optional): The HTTP header that must be used to read client's actual IP address when the request comes from a reverse proxy with a private IP address.

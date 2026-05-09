@@ -1,5 +1,13 @@
 # Technitium DNS Server Change Log
 
+## Version 15.2
+Release Date: 9 May 2026
+
+- Updated SSO implementation to read claims from user info endpoint when available and to use `HttpClientNetworkHandler` as backchannel.
+- Added new Web Service Reverse Proxy Addresses option to allow defining reverse proxies that are allowed such that Real IP header only works for these proxies.
+- The Settings API has been updated to rename `reverseProxyNetworkACL` option to `dnsReverseProxyNetworkACL` to avoid confusion since this option is used only with DNS Optional Protocols.
+- Multiple other minor bug fixes and improvements.
+
 ## Version 15.1
 Release Date: 3 May 2026
 

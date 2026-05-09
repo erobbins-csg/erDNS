@@ -1,6 +1,6 @@
 ﻿/*
 Technitium DNS Server
-Copyright (C) 2025  Shreyas Zare (shreyas@technitium.com)
+Copyright (C) 2026  Shreyas Zare (shreyas@technitium.com)
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -293,7 +293,7 @@ namespace DnsServerCore
 
                 DnsApplication application = await _dnsWebService._dnsServer.DnsApplicationManager.DownloadAndInstallAppAsync(name, new Uri(url));
 
-                _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] DNS application '" + name + "' was installed successfully from: " + url);
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] DNS application '" + name + "' was installed successfully from: " + url);
                 
                 //trigger cluster update
                 if (_dnsWebService._clusterManager.ClusterInitialized)
@@ -322,7 +322,7 @@ namespace DnsServerCore
 
                 DnsApplication application = await _dnsWebService._dnsServer.DnsApplicationManager.DownloadAndUpdateAppAsync(name, new Uri(url));
 
-                _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] DNS application '" + name + "' was updated successfully from: " + url);
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] DNS application '" + name + "' was updated successfully from: " + url);
 
                 //trigger cluster update
                 if (_dnsWebService._clusterManager.ClusterInitialized)
@@ -360,7 +360,7 @@ namespace DnsServerCore
                         fS.Position = 0;
                         DnsApplication application = await _dnsWebService._dnsServer.DnsApplicationManager.InstallApplicationAsync(name, fS);
 
-                        _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] DNS application '" + name + "' was installed successfully.");
+                        _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] DNS application '" + name + "' was installed successfully.");
                         
                         //trigger cluster update
                         if (_dnsWebService._clusterManager.ClusterInitialized)
@@ -411,7 +411,7 @@ namespace DnsServerCore
                         fS.Position = 0;
                         DnsApplication application = await _dnsWebService._dnsServer.DnsApplicationManager.UpdateApplicationAsync(name, fS);
 
-                        _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] DNS application '" + name + "' was updated successfully.");
+                        _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] DNS application '" + name + "' was updated successfully.");
 
                         //trigger cluster update
                         if (_dnsWebService._clusterManager.ClusterInitialized)
@@ -448,7 +448,7 @@ namespace DnsServerCore
                 string name = request.GetQueryOrForm("name").Trim();
 
                 _dnsWebService._dnsServer.DnsApplicationManager.UninstallApplication(name);
-                _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] DNS application '" + name + "' was uninstalled successfully.");
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] DNS application '" + name + "' was uninstalled successfully.");
 
                 //trigger cluster update
                 if (_dnsWebService._clusterManager.ClusterInitialized)
@@ -498,7 +498,7 @@ namespace DnsServerCore
 
                 await application.SetConfigAsync(config);
 
-                _dnsWebService._log.Write(context.GetRemoteEndPoint(_dnsWebService._webServiceRealIpHeader), "[" + sessionUser.Username + "] DNS application '" + name + "' app config was saved successfully.");
+                _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] DNS application '" + name + "' app config was saved successfully.");
 
                 //trigger cluster update
                 if (_dnsWebService._clusterManager.ClusterInitialized)
