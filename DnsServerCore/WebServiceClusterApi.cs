@@ -187,7 +187,7 @@ namespace DnsServerCore
                     }
                     catch (Exception ex)
                     {
-                        _dnsWebService._log.Write("Failed to restart web service.\r\n" + ex.ToString());
+                        _dnsWebService._log.Write("Failed to restart web service.", ex);
                         _dnsWebService._log.Write("Attempting to restart web service in HTTP only mode.");
 
                         try
@@ -197,7 +197,7 @@ namespace DnsServerCore
                         }
                         catch (Exception ex2)
                         {
-                            _dnsWebService._log.Write("Failed to restart web service in HTTP only mode.\r\n" + ex2.ToString());
+                            _dnsWebService._log.Write("Failed to restart web service in HTTP only mode.", ex2);
                         }
                     }
                 });

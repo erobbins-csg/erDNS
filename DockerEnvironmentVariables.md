@@ -8,7 +8,7 @@ The environment variables are described below:
 
 | Environment Variable                              | Type    | Description                                                                                                                              |
 | ------------------------------------------------- | ------- | -----------------------------------------------------------------------------------------------------------------------------------------|
-| DNS_SERVER_DOMAIN                                 | String  | The primary domain name used by this DNS Server to identify itself.                                                                      |
+| DNS_SERVER_DOMAIN                                 | String  | The primary fully qualified domain name used by this DNS Server to identify itself.                                                      |
 | DNS_SERVER_ADMIN_PASSWORD                         | String  | The DNS web console admin user password.                                                                                                 |
 | DNS_SERVER_ADMIN_PASSWORD_FILE                    | String  | The path to a file that contains a plain text password for the DNS web console admin user.                                               |
 | DNS_SERVER_PREFER_IPV6                            | Boolean | DNS Server will use IPv6 for querying whenever possible with this option enabled.                                                        |
@@ -20,6 +20,7 @@ The environment variables are described below:
 | DNS_SERVER_WEB_SERVICE_TLS_CERTIFICATE_PATH       | String  | The file path to the TLS certificate for the DNS web console.                                                                            |
 | DNS_SERVER_WEB_SERVICE_TLS_CERTIFICATE_PASSWORD   | String  | The password for the TLS certificate for the DNS web console.                                                                            |
 | DNS_SERVER_WEB_SERVICE_HTTP_TO_TLS_REDIRECT       | Boolean | Enables HTTP to HTTPS redirection for the DNS web console.                                                                               |
+| DNS_SERVER_WEB_SERVICE_REVERSE_PROXY_ADDRESSES    | String  | A comma separated list of IP addresses or network addresses to define allowed reverse proxy servers. Add ! character at the start to deny, e.g. !192.168.10.0/24 will deny entire subnet. The ACL is processed in the same order its listed. If no networks match, the default policy is to deny all.
 | DNS_SERVER_OPTIONAL_PROTOCOL_DNS_OVER_HTTP        | Boolean | Enables DNS server optional protocol DNS-over-HTTP on TCP port 80 to be used with a TLS terminating reverse proxy like nginx.            |
 | DNS_SERVER_RECURSION                              | String  | Recursion options: `Allow`, `Deny`, `AllowOnlyForPrivateNetworks`, `UseSpecifiedNetworkACL`.                                             |
 | DNS_SERVER_RECURSION_NETWORK_ACL                  | String  | A comma separated list of IP addresses or network addresses to allow access. Add ! character at the start to deny access, e.g. !192.168.10.0/24 will deny entire subnet. The ACL is processed in the same order its listed. If no networks match, the default policy is to deny all except loopback. Valid only for `UseSpecifiedNetworkACL` recursion option. |

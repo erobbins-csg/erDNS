@@ -1,6 +1,6 @@
 ﻿/*
 Technitium DNS Server
-Copyright (C) 2021  Shreyas Zare (shreyas@technitium.com)
+Copyright (C) 2026  Shreyas Zare (shreyas@technitium.com)
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -35,14 +35,14 @@ namespace Failover
 
         public readonly DateTime DateTime = DateTime.UtcNow;
         public readonly HealthStatus Status;
-        public readonly string FailureReason;
-        public readonly Exception Exception;
+        public readonly string? FailureReason;
+        public readonly Exception? Exception;
 
         #endregion
 
         #region constructor
 
-        public HealthCheckResponse(HealthStatus status, string failureReason = null, Exception exception = null)
+        public HealthCheckResponse(HealthStatus status, string? failureReason = null, Exception? exception = null)
         {
             Status = status;
             FailureReason = failureReason;

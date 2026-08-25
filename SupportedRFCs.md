@@ -36,10 +36,12 @@ The following is a list of RFCs that Technitium DNS Server implements.
 | RFC 5936 | DNS Zone Transfer Protocol (AXFR)
 | RFC 5966 | DNS Transport over TCP - Implementation Requirements
 | RFC 6147 | DNS64: DNS Extensions for Network Address Translation from IPv6 Clients to IPv4 Servers
+| RFC 6303 | Locally Served DNS Zones
 | RFC 6594 | Use of the SHA-256 Algorithm with RSA, Digital Signature Algorithm (DSA), and Elliptic Curve DSA (ECDSA) in SSHFP Resource Records
 | RFC 6605 | Elliptic Curve Digital Signature Algorithm (DSA) for DNSSEC
 | RFC 6672 | DNAME Redirection in the DNS
 | RFC 6698 | The DNS-Based Authentication of Named Entities (DANE) Transport Layer Security (TLS) Protocol: TLSA
+| RFC 6761 | Special-Use Domain Names
 | RFC 6781 | DNSSEC Operational Practices, Version 2
 | RFC 6840 | Clarifications and Implementation Notes for DNS Security (DNSSEC)
 | RFC 6844 | DNS Certification Authority Authorization (CAA) Resource Record
@@ -52,11 +54,14 @@ The following is a list of RFCs that Technitium DNS Server implements.
 | RFC 7583 | DNSSEC Key Rollover Timing Considerations
 | RFC 7671 | The DNS-Based Authentication of Named Entities (DANE) Protocol: Updates and Operational Guidance
 | RFC 7766 | DNS Transport over TCP - Implementation Requirements
+| RFC 7793 | Adding 100.64.0.0/10 Prefixes to the IPv4 Locally-Served DNS Zones Registry
 | RFC 7816 | DNS Query Name Minimisation to Improve Privacy
 | RFC 7830 | The EDNS(0) Padding Option
 | RFC 7871 | Client Subnet in DNS Queries
 | RFC 7858 | Specification for DNS over Transport Layer Security (TLS)
 | RFC 8080 | Edwards-Curve Digital Security Algorithm (EdDSA) for DNSSEC
+| RFC 8109 | Initializing a DNS Resolver with Priming Queries
+| RFC 8375 | Special-Use Domain 'home.arpa.'
 | RFC 8484 | DNS Queries over HTTPS (DoH)
 | RFC 8709 | Ed25519 and Ed448 Public Key Algorithms for the Secure Shell (SSH) Protocol
 | RFC 8767 | Serving Stale Data to Improve DNS Resiliency
@@ -71,6 +76,7 @@ The following is a list of RFCs that Technitium DNS Server implements.
 | RFC 9432 | DNS Catalog Zones
 | RFC 9520 | Negative Caching of DNS Resolution Failures
 | RFC 9460 | Service Binding and Parameter Specification via the DNS (SVCB and HTTPS Resource Records) 
+| RFC 9609 | Initializing a DNS Resolver with Priming Queries
 | draft-vixie-dnsext-dns0x20 | Use of Bit 0x20 in DNS Labels to Improve Transaction Identity
 
 The following is a list that the DHCP Server included with the Technitium DNS Server implements.

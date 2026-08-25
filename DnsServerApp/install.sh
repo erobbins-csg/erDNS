@@ -31,7 +31,7 @@ mkdir -p $dnsConfig
 
 echo "" > $installLog
 
-if dotnet --list-runtimes 2> /dev/null | grep -q "$dotnetRuntime"; 
+if dotnet --list-runtimes 2> /dev/null | grep -q "$dotnetRuntime";
 then
     dotnetFound="yes"
 else
@@ -53,12 +53,19 @@ else
 
     curl -sSL $dotnetUrl | bash /dev/stdin -c $dotnetVersion --runtime aspnetcore --no-path --install-dir $dotnetDir --verbose >> $installLog 2>&1
 
+    # On Alpine Linux dotnet requires libstdc++
+    if command -v apk >/dev/null 2>&1
+    then
+        echo "Installing ASP.NET Core Runtime dependencies..."
+        apk add --no-cache libstdc++ >> $installLog 2>&1
+    fi
+
     if [ ! -f "/usr/bin/dotnet" ]
     then
         ln -s $dotnetDir/dotnet /usr/bin >> $installLog 2>&1
     fi
 
-    if dotnet --list-runtimes 2> /dev/null | grep -q "$dotnetRuntime"; 
+    if dotnet --list-runtimes 2> /dev/null | grep -q "$dotnetRuntime";
     then
         if [ "$dotnetUpdate" = "yes" ]
         then
@@ -93,7 +100,7 @@ tar -zxf $dnsTar -C $dnsDir >> $installLog 2>&1
 
 echo ""
 
-if dotnet $dnsDir/DnsServerApp.dll --icu-test >> $installLog 2>&1
+if $( dotnet $dnsDir/DnsServerApp.dll --icu-test >> $installLog 2>&1 ) >/dev/null 2>&1;
 then
     echo "ICU package is already installed."
 else
@@ -158,7 +165,7 @@ else
     fi
 
     #test again to confirm
-    if dotnet $dnsDir/DnsServerApp.dll --icu-test >> $installLog 2>&1
+    if $( dotnet $dnsDir/DnsServerApp.dll --icu-test >> $installLog 2>&1 ) >/dev/null 2>&1;
     then
         echo "ICU package was installed successfully!"
     else
@@ -170,50 +177,77 @@ fi
 
 echo ""
 
-if ! [ "$(ps --no-headers -o comm 1 | tr -d '\n')" = "systemd" ] 
+if [ "$(ps --no-headers -o comm 1 | tr -d '\n')" = "systemd" ]
 then
-    echo "Failed to install Technitium DNS Server: systemd was not detected."
-    echo "Please read the 'Installing DNS Server Manually' section in this blog post to understand how to manually install the DNS server on your distro: https://blog.technitium.com/2017/11/running-dns-server-on-ubuntu-linux.html"
-    exit 1
-fi
-
-if [ -f "/etc/systemd/system/dns.service" ]
-then
-    echo "Restarting systemd service..."
-    systemctl restart dns.service >> $installLog 2>&1
-else
-    mkdir -p $dnsLog
-    
-    echo "Configuring user and permissions..."
-    useradd --system -M --shell /usr/sbin/nologin $serviceUser >> $installLog 2>&1
-    chown -R $serviceUser:$serviceUser $dnsDir $dnsConfig $dnsLog >> $installLog 2>&1
-
-    echo "Configuring systemd service..."
-    cp $dnsDir/systemd.service /etc/systemd/system/dns.service
-    systemctl enable dns.service >> $installLog 2>&1
-
-    systemctl stop systemd-resolved >> $installLog 2>&1
-    systemctl disable systemd-resolved >> $installLog 2>&1
-
-    systemctl start dns.service >> $installLog 2>&1
-
-    if [ -f "/etc/NetworkManager/NetworkManager.conf" ]
+    if [ -f "/etc/systemd/system/dns.service" ]
     then
-        currentVal=$(grep -F "dns=" /etc/NetworkManager/NetworkManager.conf)
+        echo "Configuring permissions..."
+        chown -R $serviceUser:$serviceUser $dnsDir $dnsConfig $dnsLog >> $installLog 2>&1
 
-        if [ "$currentVal" = "" ]
+        echo "Restarting systemd service..."
+        systemctl restart dns.service >> $installLog 2>&1
+    else
+        mkdir -p $dnsLog
+
+        echo "Configuring user and permissions..."
+        useradd --system -M --shell /usr/sbin/nologin --user-group $serviceUser >> $installLog 2>&1
+        chown -R $serviceUser:$serviceUser $dnsDir $dnsConfig $dnsLog >> $installLog 2>&1
+
+        echo "Configuring systemd service..."
+        cp $dnsDir/systemd.service /etc/systemd/system/dns.service
+        systemctl enable dns.service >> $installLog 2>&1
+
+        systemctl stop systemd-resolved >> $installLog 2>&1
+        systemctl disable systemd-resolved >> $installLog 2>&1
+
+        systemctl start dns.service >> $installLog 2>&1
+
+        if [ -f "/etc/NetworkManager/NetworkManager.conf" ]
         then
-            printf "\n[main]\ndns=none\n" >> /etc/NetworkManager/NetworkManager.conf 2>> $installLog
-        elif [ "$currentVal" != "dns=none" ]
-        then
-            sed -i "s/$currentVal/dns=none/g" /etc/NetworkManager/NetworkManager.conf 2>> $installLog
+            currentVal=$(grep -F "dns=" /etc/NetworkManager/NetworkManager.conf)
+
+            if [ "$currentVal" = "" ]
+            then
+                printf "\n[main]\ndns=none\n" >> /etc/NetworkManager/NetworkManager.conf 2>> $installLog
+            elif [ "$currentVal" != "dns=none" ]
+            then
+                sed -i "s/$currentVal/dns=none/g" /etc/NetworkManager/NetworkManager.conf 2>> $installLog
+            fi
         fi
     fi
+elif [ -x "/sbin/rc-service" ]
+then
+    if [ -f "/etc/init.d/dns" ]
+    then
+        echo "Configuring permissions..."
+        chown -R $serviceUser:$serviceUser $dnsDir $dnsConfig $dnsLog >> $installLog 2>&1
 
-    cp -a /etc/resolv.conf $dnsDir/resolv.conf.bak >> $installLog 2>&1
-    rm /etc/resolv.conf >> $installLog 2>&1
-    printf "# Generated by Technitium DNS Server Installer\n\nnameserver 127.0.0.1\n" > /etc/resolv.conf 2>> $installLog
-fi
+        echo "Restarting OpenRC service..."
+        rc-service dns stop >> $installLog 2>&1
+        rc-service dns start >> $installLog 2>&1
+    else
+        mkdir -p $dnsLog
+
+        echo "Configuring user and permissions..."
+        addgroup -S $serviceUser >> $installLog 2>&1
+        adduser -H -S -D -s /bin/false -G $serviceUser $serviceUser >> $installLog 2>&1
+        chown -R $serviceUser:$serviceUser $dnsDir $dnsConfig $dnsLog >> $installLog 2>&1
+
+        echo "Configuring OpenRC service..."
+        cp $dnsDir/openrc.service /etc/init.d/dns
+        chmod +x /etc/init.d/dns
+        rc-update add dns >> $installLog 2>&1
+        rc-service dns start >> $installLog 2>&1
+    fi
+else
+    echo "Failed to install Technitium DNS Server: systemd/openrc was not detected."
+    echo "Please read the 'Installing DNS Server Manually' section in this blog post to understand how to manually install the DNS server on your distro: https://blog.technitium.com/2017/11/running-dns-server-on-ubuntu-linux.html"
+    exit 1
+fi 2>/dev/null
+
+cp -a /etc/resolv.conf $dnsDir/resolv.conf.bak >> $installLog 2>&1    
+rm /etc/resolv.conf >> $installLog 2>&1    
+printf "# Generated by Technitium DNS Server Installer\n\nnameserver 127.0.0.1\n" > /etc/resolv.conf 2>> $installLog
 
 echo ""
 echo "Technitium DNS Server was installed successfully!"

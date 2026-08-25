@@ -86,7 +86,7 @@ namespace DnsServerSystemTrayApp
                     case "--network-dns-item":
                         foreach (DnsProvider dnsProvider in _dnsProviders)
                         {
-                            if ((args.Length > 1) && dnsProvider.Name.Equals(args[1]))
+                            if ((args.Length > 1) && dnsProvider.Name.Equals(args[1], StringComparison.Ordinal))
                             {
                                 NetworkDnsMenuSubItem_Click(new ToolStripMenuItem(dnsProvider.Name) { Tag = dnsProvider }, EventArgs.Empty);
                                 break;
@@ -620,7 +620,7 @@ namespace DnsServerSystemTrayApp
                         {
                             string? autoStartPath = key.GetValue("Technitium DNS System Tray") as string;
 
-                            AutoStartMenuItem.Checked = (autoStartPath != null) && autoStartPath.Equals("\"" + Program.APP_PATH + "\"");
+                            AutoStartMenuItem.Checked = (autoStartPath != null) && autoStartPath.Equals("\"" + Program.APP_PATH + "\"", StringComparison.Ordinal);
                         }
                     }
                 }

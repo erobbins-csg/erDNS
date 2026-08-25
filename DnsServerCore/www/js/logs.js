@@ -522,7 +522,7 @@ function queryLogs(pageNumber, liveUpdate) {
                     htmlEncode(responseJSON.response.entries[i].answer) +
                     "</td><td align=\"right\"><div class=\"dropdown\"><a href=\"#\" id=\"btnQueryLogsRowOption" + i + "\" class=\"dropdown-toggle\" data-toggle=\"dropdown\" aria-haspopup=\"true\" aria-expanded=\"true\"><span class=\"glyphicon glyphicon-option-vertical\" aria-hidden=\"true\"></span></a><ul class=\"dropdown-menu dropdown-menu-right\">";
 
-                tableHtml += "<li><a href=\"#\" data-id=\"" + i + "\" onclick=\"queryDnsServer('" + responseJSON.response.entries[i].qname + "', '" + responseJSON.response.entries[i].qtype + "', '" + node + "'); return false;\">Query DNS Server</a></li>";
+                tableHtml += "<li><a href=\"#\" data-id=\"" + i + "\" data-domain=\"" + htmlEncode(responseJSON.response.entries[i].qname) + "\" onclick=\"queryDnsServer($(this).attr('data-domain'), '" + responseJSON.response.entries[i].qtype + "', '" + node + "'); return false;\">Query DNS Server</a></li>";
 
                 switch (responseJSON.response.entries[i].responseType.toLowerCase()) {
                     case "blocked":

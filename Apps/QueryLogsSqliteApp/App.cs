@@ -405,7 +405,7 @@ namespace QueryLogsSqlite
 
                 connectionString = connectionString.Replace("{sqliteDbPath}", sqliteDbPath);
 
-                if ((_connectionString is not null) && !_connectionString.Equals(connectionString))
+                if ((_connectionString is not null) && !_connectionString.Equals(connectionString, StringComparison.Ordinal))
                     SqliteConnection.ClearAllPools(); //close previous db file
 
                 _connectionString = connectionString;

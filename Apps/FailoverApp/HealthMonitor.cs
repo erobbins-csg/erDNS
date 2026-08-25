@@ -1,6 +1,6 @@
 ﻿/*
 Technitium DNS Server
-Copyright (C) 2025  Shreyas Zare (shreyas@technitium.com)
+Copyright (C) 2026  Shreyas Zare (shreyas@technitium.com)
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -30,15 +30,15 @@ namespace Failover
         #region variables
 
         readonly IDnsServer _dnsServer;
-        readonly IPAddress _address;
-        readonly string _domain;
+        readonly IPAddress? _address;
+        readonly string? _domain;
         readonly DnsResourceRecordType _type;
         readonly HealthCheck _healthCheck;
 
-        readonly Timer _healthCheckTimer;
+        readonly Timer? _healthCheckTimer;
         const int HEALTH_CHECK_TIMER_INITIAL_INTERVAL = 1000;
 
-        HealthCheckResponse _lastHealthCheckResponse;
+        HealthCheckResponse? _lastHealthCheckResponse;
 
         const int MONITOR_EXPIRY = 1 * 60 * 60 * 1000; //1 hour
         DateTime _lastHealthStatusCheckedOn;
@@ -47,13 +47,13 @@ namespace Failover
 
         #region constructor
 
-        public HealthMonitor(IDnsServer dnsServer, IPAddress address, HealthCheck healthCheck, Uri healthCheckUrl)
+        public HealthMonitor(IDnsServer dnsServer, IPAddress address, HealthCheck healthCheck, Uri? healthCheckUrl)
         {
             _dnsServer = dnsServer;
             _address = address;
             _healthCheck = healthCheck;
 
-            _healthCheckTimer = new Timer(async delegate (object state)
+            _healthCheckTimer = new Timer(async delegate (object? state)
             {
                 try
                 {
@@ -112,12 +112,12 @@ namespace Failover
                             if (!maintenance)
                             {
                                 //avoid sending email alerts when switching from or to maintenance
-                                EmailAlert emailAlert = _healthCheck.EmailAlert;
+                                EmailAlert? emailAlert = _healthCheck.EmailAlert;
                                 if (emailAlert is not null)
                                     _ = emailAlert.SendAlertAsync(_address, _healthCheck.Name, healthCheckResponse);
                             }
 
-                            WebHook webHook = _healthCheck.WebHook;
+                            WebHook? webHook = _healthCheck.WebHook;
                             if (webHook is not null)
                                 _ = webHook.CallAsync(_address, _healthCheck.Name, healthCheckResponse);
                         }
@@ -131,11 +131,11 @@ namespace Failover
 
                     if (_lastHealthCheckResponse is null)
                     {
-                        EmailAlert emailAlert = _healthCheck.EmailAlert;
+                        EmailAlert? emailAlert = _healthCheck.EmailAlert;
                         if (emailAlert is not null)
                             _ = emailAlert.SendAlertAsync(_address, _healthCheck.Name, ex);
 
-                        WebHook webHook = _healthCheck.WebHook;
+                        WebHook? webHook = _healthCheck.WebHook;
                         if (webHook is not null)
                             _ = webHook.CallAsync(_address, _healthCheck.Name, ex);
 
@@ -149,21 +149,21 @@ namespace Failover
                 finally
                 {
                     if (!_disposed && (_healthCheck is not null))
-                        _healthCheckTimer.Change(_healthCheck.Interval, Timeout.Infinite);
+                        _healthCheckTimer?.Change(_healthCheck.Interval, Timeout.Infinite);
                 }
             }, null, Timeout.Infinite, Timeout.Infinite);
 
             _healthCheckTimer.Change(HEALTH_CHECK_TIMER_INITIAL_INTERVAL, Timeout.Infinite);
         }
 
-        public HealthMonitor(IDnsServer dnsServer, string domain, DnsResourceRecordType type, HealthCheck healthCheck, Uri healthCheckUrl)
+        public HealthMonitor(IDnsServer dnsServer, string domain, DnsResourceRecordType type, HealthCheck healthCheck, Uri? healthCheckUrl)
         {
             _dnsServer = dnsServer;
             _domain = domain;
             _type = type;
             _healthCheck = healthCheck;
 
-            _healthCheckTimer = new Timer(async delegate (object state)
+            _healthCheckTimer = new Timer(async delegate (object? state)
             {
                 try
                 {
@@ -222,12 +222,12 @@ namespace Failover
                             if (!maintenance)
                             {
                                 //avoid sending email alerts when switching from or to maintenance
-                                EmailAlert emailAlert = _healthCheck.EmailAlert;
+                                EmailAlert? emailAlert = _healthCheck.EmailAlert;
                                 if (emailAlert is not null)
                                     _ = emailAlert.SendAlertAsync(_domain, _type, _healthCheck.Name, healthCheckResponse);
                             }
 
-                            WebHook webHook = _healthCheck.WebHook;
+                            WebHook? webHook = _healthCheck.WebHook;
                             if (webHook is not null)
                                 _ = webHook.CallAsync(_domain, _type, _healthCheck.Name, healthCheckResponse);
                         }
@@ -241,11 +241,11 @@ namespace Failover
 
                     if (_lastHealthCheckResponse is null)
                     {
-                        EmailAlert emailAlert = _healthCheck.EmailAlert;
+                        EmailAlert? emailAlert = _healthCheck.EmailAlert;
                         if (emailAlert is not null)
                             _ = emailAlert.SendAlertAsync(_domain, _type, _healthCheck.Name, ex);
 
-                        WebHook webHook = _healthCheck.WebHook;
+                        WebHook? webHook = _healthCheck.WebHook;
                         if (webHook is not null)
                             _ = webHook.CallAsync(_domain, _type, _healthCheck.Name, ex);
 
@@ -313,7 +313,7 @@ namespace Failover
 
         #region properties
 
-        public IPAddress Address
+        public IPAddress? Address
         { get { return _address; } }
 
         public HealthCheckResponse LastHealthCheckResponse

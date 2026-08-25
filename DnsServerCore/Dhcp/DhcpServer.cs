@@ -261,7 +261,10 @@ namespace DnsServerCore.Dhcp
                         else
                             udpSocket = udpListener; //no appropriate socket found so use default socket
 
-                        await udpSocket.SendToAsync(new ArraySegment<byte>(sendBuffer, 0, (int)sendBufferStream.Position), SocketFlags.DontRoute, new IPEndPoint(IPAddress.Broadcast, 68)); //no routing for broadcast
+                        if (OperatingSystem.IsMacOS())
+                            await udpSocket.SendToAsync(new ArraySegment<byte>(sendBuffer, 0, (int)sendBufferStream.Position), SocketFlags.None, new IPEndPoint(IPAddress.Broadcast, 68));
+                        else
+                            await udpSocket.SendToAsync(new ArraySegment<byte>(sendBuffer, 0, (int)sendBufferStream.Position), SocketFlags.DontRoute, new IPEndPoint(IPAddress.Broadcast, 68)); //no routing for broadcast
                     }
                 }
             }
@@ -450,19 +453,13 @@ namespace DnsServerCore.Dhcp
                         if (options is null)
                             return null;
 
-                        scope.CommitLease(leaseOffer);
-
-                        //log ip lease
-                        _log.Write(remoteEP, "DHCP Server leased IP address [" + leaseOffer.Address.ToString() + "] to " + request.GetClientFullIdentifier() + " for scope: " + scope.Name);
-
+                        //update lease hostname
                         if (string.IsNullOrWhiteSpace(scope.DomainName))
                         {
-                            //update lease hostname
                             leaseOffer.SetHostName(request.HostName?.HostName);
                         }
                         else
                         {
-                            //update dns
                             string clientDomainName = null;
 
                             if (!string.IsNullOrWhiteSpace(reservedLeaseHostName))
@@ -493,9 +490,13 @@ namespace DnsServerCore.Dhcp
                                     RemoveDnsEntries(scope, leaseOffer); //hostname changed! delete old hostname entry from DNS
 
                                 leaseOffer.SetHostName(clientDomainName);
-                                AddDnsEntries(scope, leaseOffer);
                             }
                         }
+
+                        scope.CommitLease(leaseOffer);
+
+                        //log ip lease
+                        _log.Write(remoteEP, "DHCP Server leased IP address [" + leaseOffer.Address.ToString() + "] to " + request.GetClientFullIdentifier() + " for scope: " + scope.Name);
 
                         return DhcpMessage.CreateReply(request, leaseOffer.Address, scope.ServerAddress ?? serverIdentifierAddress, scope.ServerHostName, scope.BootFileName, options);
                     }
@@ -529,9 +530,6 @@ namespace DnsServerCore.Dhcp
                         //log issue
                         _log.Write(remoteEP, "DHCP Server received DECLINE message for scope '" + scope.Name + "': " + lease.GetClientInfo() + " detected that IP address [" + lease.Address + "] is already in use.");
 
-                        //update dns
-                        RemoveDnsEntries(scope, lease);
-
                         //do nothing
                         return null;
                     }
@@ -564,9 +562,6 @@ namespace DnsServerCore.Dhcp
 
                         //log ip lease release
                         _log.Write(remoteEP, "DHCP Server released IP address [" + lease.Address.ToString() + "] that was leased to " + lease.GetClientInfo() + " for scope: " + scope.Name);
-
-                        //update dns
-                        RemoveDnsEntries(scope, lease);
 
                         //do nothing
                         return null;
@@ -605,12 +600,12 @@ namespace DnsServerCore.Dhcp
 
                             if (string.IsNullOrWhiteSpace(clientDomainName))
                             {
-                                if (request.HostName is not null)
+                                if ((request.HostName is not null) && !string.IsNullOrWhiteSpace(request.HostName.HostName))
                                     clientDomainName = GetSanitizedHostName(request.HostName.HostName) + "." + scope.DomainName;
                             }
 
                             if (!string.IsNullOrWhiteSpace(clientDomainName))
-                                AddDnsEntries(scope, clientDomainName, request.ClientIpAddress, false, false);
+                                AddDnsEntries(scope, clientDomainName, request.ClientIpAddress, false);
                         }
 
                         return DhcpMessage.CreateReply(request, IPAddress.Any, scope.ServerAddress ?? serverIdentifierAddress, null, null, options);
@@ -730,13 +725,11 @@ namespace DnsServerCore.Dhcp
                         reservedLeaseHostName = GetSanitizedHostName(reservedLeaseHostName) + "." + scope.DomainName;
                 }
 
-                bool hasReservedLeaseHostname = scope.HasReservedLeaseHostName(lease);
-
-                AddDnsEntries(scope, reservedLeaseHostName, lease.Address, true, hasReservedLeaseHostname);
+                AddDnsEntries(scope, reservedLeaseHostName, lease.Address, true);
             }
             else
             {
-                AddDnsEntries(scope, lease.HostName, lease.Address, false, false);
+                AddDnsEntries(scope, lease.HostName, lease.Address, false);
             }
         }
 
@@ -761,7 +754,7 @@ namespace DnsServerCore.Dhcp
             }
         }
 
-        private void AddDnsEntries(Scope scope, string domain, IPAddress address, bool isReservedLease, bool hasReservedLeaseHostname)
+        private void AddDnsEntries(Scope scope, string domain, IPAddress address, bool isReservedLease)
         {
             if ((_dnsServer is null) || (_authManager is null))
                 return;
@@ -848,17 +841,30 @@ namespace DnsServerCore.Dhcp
                     }
                 }
 
-                DnsResourceRecord aRecord = new DnsResourceRecord(domain, DnsResourceRecordType.A, DnsClass.IN, scope.DnsTtl, new DnsARecordData(address));
+                IReadOnlyList<DnsResourceRecord> existingARecords = _dnsServer.AuthZoneManager.GetRecords(zoneName, domain, DnsResourceRecordType.A);
+                if ((existingARecords.Count != 1) || (existingARecords[0].TTL != scope.DnsTtl) || (existingARecords[0].RDATA is not DnsARecordData a) || !a.Address.Equals(address))
+                {
+                    DnsResourceRecord aRecord = new DnsResourceRecord(domain, DnsResourceRecordType.A, DnsClass.IN, scope.DnsTtl, new DnsARecordData(address));
 
-                GenericRecordInfo aRecordInfo = aRecord.GetAuthGenericRecordInfo();
-                aRecordInfo.LastModified = DateTime.UtcNow;
-                aRecordInfo.Comments = $"Via '{scope.Name}' DHCP scope";
+                    GenericRecordInfo aRecordInfo = aRecord.GetAuthGenericRecordInfo();
+                    aRecordInfo.LastModified = DateTime.UtcNow;
+                    aRecordInfo.Comments = $"Via '{scope.Name}' DHCP scope";
 
-                if (!hasReservedLeaseHostname)
-                    aRecordInfo.ExpiryTtl = scope.GetLeaseTime();
+                    _dnsServer.AuthZoneManager.SetRecord(zoneName, aRecord);
+                    _log.Write("DHCP Server updated DNS A record '" + domain + "' with IP address [" + address.ToString() + "].");
+                }
+                else
+                {
+                    //remove record expiry TTL to prevent the existing record from getting removed automatically from the zone
+                    DnsResourceRecord existingARecord = existingARecords[0];
 
-                _dnsServer.AuthZoneManager.SetRecord(zoneName, aRecord);
-                _log.Write("DHCP Server updated DNS A record '" + domain + "' with IP address [" + address.ToString() + "].");
+                    GenericRecordInfo aRecordInfo = existingARecord.GetAuthGenericRecordInfo();
+                    if (aRecordInfo.ExpiryTtl > 0)
+                    {
+                        aRecordInfo.ExpiryTtl = 0;
+                        _dnsServer.AuthZoneManager.SetRecord(zoneName, existingARecord);
+                    }
+                }
 
                 //update reverse zone
                 AuthZoneInfo reverseZoneInfo = _dnsServer.AuthZoneManager.FindAuthZoneInfo(reverseDomain);
@@ -908,18 +914,30 @@ namespace DnsServerCore.Dhcp
 
                 reverseZoneName = reverseZoneInfo.Name;
 
-                DnsResourceRecord ptrRecord = new DnsResourceRecord(reverseDomain, DnsResourceRecordType.PTR, DnsClass.IN, scope.DnsTtl, new DnsPTRRecordData(domain));
+                IReadOnlyList<DnsResourceRecord> existingPtrRecords = _dnsServer.AuthZoneManager.GetRecords(reverseZoneName, reverseDomain, DnsResourceRecordType.PTR);
+                if ((existingPtrRecords.Count != 1) || (existingPtrRecords[0].TTL != scope.DnsTtl) || (existingPtrRecords[0].RDATA is not DnsPTRRecordData ptr) || !ptr.Domain.Equals(domain, StringComparison.Ordinal))
+                {
+                    DnsResourceRecord ptrRecord = new DnsResourceRecord(reverseDomain, DnsResourceRecordType.PTR, DnsClass.IN, scope.DnsTtl, new DnsPTRRecordData(domain));
 
-                GenericRecordInfo ptrRecordInfo = ptrRecord.GetAuthGenericRecordInfo();
-                ptrRecordInfo.LastModified = DateTime.UtcNow;
-                ptrRecordInfo.Comments = $"Via '{scope.Name}' DHCP scope";
+                    GenericRecordInfo ptrRecordInfo = ptrRecord.GetAuthGenericRecordInfo();
+                    ptrRecordInfo.LastModified = DateTime.UtcNow;
+                    ptrRecordInfo.Comments = $"Via '{scope.Name}' DHCP scope";
 
-                if (!hasReservedLeaseHostname)
-                    ptrRecordInfo.ExpiryTtl = scope.GetLeaseTime();
+                    _dnsServer.AuthZoneManager.SetRecord(reverseZoneName, ptrRecord);
+                    _log.Write("DHCP Server updated DNS PTR record '" + reverseDomain + "' with domain name '" + domain + "'.");
+                }
+                else
+                {
+                    //remove record expiry TTL to prevent the existing record from getting removed automatically from the zone
+                    DnsResourceRecord existingPtrRecord = existingPtrRecords[0];
 
-                _dnsServer.AuthZoneManager.SetRecord(reverseZoneName, ptrRecord);
-
-                _log.Write("DHCP Server updated DNS PTR record '" + reverseDomain + "' with domain name '" + domain + "'.");
+                    GenericRecordInfo ptrRecordInfo = existingPtrRecord.GetAuthGenericRecordInfo();
+                    if (ptrRecordInfo.ExpiryTtl > 0)
+                    {
+                        ptrRecordInfo.ExpiryTtl = 0;
+                        _dnsServer.AuthZoneManager.SetRecord(reverseZoneName, existingPtrRecord);
+                    }
+                }
 
                 //save auth zone file
                 if (zoneName is not null)
@@ -1158,7 +1176,7 @@ namespace DnsServerCore.Dhcp
             }
             catch (Exception ex)
             {
-                _log.Write(dhcpEP, "DHCP Server failed to activate scope: " + scope.Name + "\r\n" + ex.ToString());
+                _log.Write(dhcpEP, "DHCP Server failed to activate scope: " + scope.Name, ex);
 
                 if (throwException)
                     throw;
@@ -1167,7 +1185,7 @@ namespace DnsServerCore.Dhcp
             return false;
         }
 
-        private bool DeactivateScope(Scope scope, bool throwException = false)
+        private bool DeactivateScope(Scope scope, bool removeDnsEntries, bool throwException)
         {
             IPEndPoint dhcpEP = null;
 
@@ -1181,7 +1199,7 @@ namespace DnsServerCore.Dhcp
 
                 UnbindUdpListener(_dhcpDefaultEP);
 
-                if (_dnsServer is not null)
+                if (removeDnsEntries && (_dnsServer is not null))
                 {
                     //remove all leases from dns
                     foreach (KeyValuePair<ClientIdentifierOption, Lease> lease in scope.Leases)
@@ -1194,7 +1212,7 @@ namespace DnsServerCore.Dhcp
             }
             catch (Exception ex)
             {
-                _log.Write(dhcpEP, "DHCP Server failed to deactivate scope: " + scope.Name + "\r\n" + ex.ToString());
+                _log.Write(dhcpEP, "DHCP Server failed to deactivate scope: " + scope.Name, ex);
 
                 if (throwException)
                     throw;
@@ -1225,10 +1243,10 @@ namespace DnsServerCore.Dhcp
             _log.Write("DHCP Server successfully loaded scope: " + scope.Name);
         }
 
-        private void UnloadScope(Scope scope)
+        private void UnloadScope(Scope scope, bool removeDnsEntries)
         {
             if (scope.Enabled)
-                DeactivateScope(scope);
+                DeactivateScope(scope, removeDnsEntries, false);
 
             if (_scopes.TryRemove(scope.Name, out Scope removedScope))
             {
@@ -1260,7 +1278,7 @@ namespace DnsServerCore.Dhcp
             }
             catch (Exception ex)
             {
-                _log.Write("DHCP Server failed to load scope file: " + scopeFile + "\r\n" + ex.ToString());
+                _log.Write("DHCP Server failed to load scope file: " + scopeFile, ex);
             }
         }
 
@@ -1291,7 +1309,7 @@ namespace DnsServerCore.Dhcp
             }
             catch (Exception ex)
             {
-                _log.Write("DHCP Server failed to save scope file: " + scopeFile + "\r\n" + ex.ToString());
+                _log.Write("DHCP Server failed to save scope file: " + scopeFile, ex);
             }
         }
 
@@ -1307,7 +1325,7 @@ namespace DnsServerCore.Dhcp
             }
             catch (Exception ex)
             {
-                _log.Write("DHCP Server failed to delete scope file: " + scopeFile + "\r\n" + ex.ToString());
+                _log.Write("DHCP Server failed to delete scope file: " + scopeFile, ex);
             }
         }
 
@@ -1336,14 +1354,9 @@ namespace DnsServerCore.Dhcp
                         {
                             scope.Value.RemoveExpiredOffers();
 
-                            List<Lease> expiredLeases = scope.Value.RemoveExpiredLeases();
-                            if (expiredLeases.Count > 0)
-                            {
-                                _log.Write("DHCP Server removed " + expiredLeases.Count + " expired lease(s) from scope: " + scope.Value.Name);
-
-                                foreach (Lease expiredLease in expiredLeases)
-                                    RemoveDnsEntries(scope.Value, expiredLease);
-                            }
+                            int expiredLeases = scope.Value.RemoveExpiredLeases();
+                            if (expiredLeases > 0)
+                                _log.Write("DHCP Server removed " + expiredLeases + " expired lease(s) from scope: " + scope.Value.Name);
                         }
 
                         SaveModifiedScopes();
@@ -1404,7 +1417,7 @@ namespace DnsServerCore.Dhcp
             SaveModifiedScopes();
 
             foreach (KeyValuePair<string, Scope> scope in _scopes)
-                UnloadScope(scope.Value);
+                UnloadScope(scope.Value, false);
 
             _udpListeners.Clear();
 
@@ -1446,7 +1459,7 @@ namespace DnsServerCore.Dhcp
         {
             if (_scopes.TryGetValue(name, out Scope scope))
             {
-                UnloadScope(scope);
+                UnloadScope(scope, true);
                 DeleteScopeFile(scope.Name);
             }
         }
@@ -1471,7 +1484,7 @@ namespace DnsServerCore.Dhcp
         {
             if (_scopes.TryGetValue(name, out Scope scope))
             {
-                if (scope.Enabled && DeactivateScope(scope, throwException))
+                if (scope.Enabled && DeactivateScope(scope, true, throwException))
                 {
                     scope.SetEnabled(false);
                     SaveScopeFile(scope);

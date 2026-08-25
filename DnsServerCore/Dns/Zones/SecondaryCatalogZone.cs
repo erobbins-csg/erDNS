@@ -1,6 +1,6 @@
 ﻿/*
 Technitium DNS Server
-Copyright (C) 2025  Shreyas Zare (shreyas@technitium.com)
+Copyright (C) 2026  Shreyas Zare (shreyas@technitium.com)
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -22,6 +22,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
+using System.Text;
 using System.Threading.Tasks;
 using TechnitiumLibrary;
 using TechnitiumLibrary.Net;
@@ -826,7 +827,7 @@ namespace DnsServerCore.Dns.Zones
 
             IReadOnlyList<DnsResourceRecord> records = _dnsServer.AuthZoneManager.GetRecords(_name, domain, DnsResourceRecordType.TXT);
             if (records.Count > 0)
-                return (records[0].RDATA as DnsTXTRecordData).CharacterStrings.Convert(NameServerAddress.Parse);
+                return (records[0].RDATA as DnsTXTRecordData).GetCharacterStrings().Convert(NameServerAddress.Parse);
 
             return [];
         }
@@ -837,7 +838,7 @@ namespace DnsServerCore.Dns.Zones
 
             IReadOnlyList<DnsResourceRecord> records = _dnsServer.AuthZoneManager.GetRecords(_name, domain, DnsResourceRecordType.TXT);
             if (records.Count > 0)
-                return Enum.Parse<DnsTransportProtocol>((records[0].RDATA as DnsTXTRecordData).CharacterStrings[0], true);
+                return Enum.Parse<DnsTransportProtocol>(Encoding.UTF8.GetString((records[0].RDATA as DnsTXTRecordData).CharacterStrings[0]), true);
 
             return DnsTransportProtocol.Tcp;
         }
@@ -859,7 +860,7 @@ namespace DnsServerCore.Dns.Zones
 
             IReadOnlyList<DnsResourceRecord> records = _dnsServer.AuthZoneManager.GetRecords(_name, domain, DnsResourceRecordType.TXT);
             if (records.Count > 0)
-                return bool.Parse((records[0].RDATA as DnsTXTRecordData).CharacterStrings[0]);
+                return bool.Parse(Encoding.UTF8.GetString((records[0].RDATA as DnsTXTRecordData).CharacterStrings[0]));
 
             return false;
         }

@@ -1,5 +1,39 @@
 # Technitium DNS Server Change Log
 
+## Version 15.4
+Release Date: 11 July 2026
+
+- Fixed issue with UDP socket binding that cause response routing issues for a few of deployment scenarios.
+- Fixed issues with RFC compliance checks causing issues with resolution and zone transfer in some cases.
+- Added support for Unix Domain Sockets (UDS) for Web Service over HTTPS and DNS-over-HTTPS optional protocol.
+- Other minor bug fixes and improvements.
+
+## Version 15.3
+Release Date: 5 July 2026
+
+- Fixed multiple RFC compliance issues reported by Yuxiao Wu, Yunyi Zhang, Baojun Liu, and Haixin Duan from Tsinghu University.
+- Fixed an issue reported by Lawrence LUO Junhua in the Apps section default permissions by removing the `Delete` permission for `DNS Administrators` group. This permissions can be misused by users in the `DNS Administrators` group to perform privilege escalation to get access to the DNS server's Administration section. For existing installations, it is recommended to manually remove the `Delete` permission for `DNS Administrators` group for the Apps section.
+- Fixed an issue in the Settings section default permissions by removing the `Delete` permission for `DNS Administrators` group. This permission can be misused by users in the `DNS Administrators` to use backup/restore config files allowing to change options in the DNS Server's Administration section. For existing installations, it is recommended to manually remove the `Delete` permission for `DNS Administrators` group for the Settings section.
+- Fixed multiple Stored XSS vulnerabilities in the Web Console reported by Daniel Goldberg and Anner Klein from Tenzai.
+- The Linux automated installer script now supports Alpine Linux with OpenRC service. Thanks to @Wrong-Code for the PR #1889.
+- Added Unix Socket support for the Web Service and DNS-over-HTTP Optional protocol. Thanks to Ingmar Stein (@IngmarStein) for the PR #1753. 
+- The Zones section now support search/filtering options along with option to delete multiple zones at once.
+- Added option in user drop down menu to disable Update Notification. This option will prevent the Web Console from checking for updates only for the current user. This option is stored in web browser's local storage.
+- Added "Enable Check For Update" option in Settings > General section which enables the DNS Server to check if an update is available when the Check For Update API is called which usually occurs after a user logs into the Web Console. Disabling this option will disable check for software update for all users such that the API will always return no update available response without actually checking for updates.
+- Added "CSP Frame Ancestors Header" option in Settings > Web Service section to allow configuring the Content Security Policy (CSP) Frame Ancestors header value.
+- Added "Enable Redirect To Help Page" option in Setting > Optional Protocols section to control if the DoH help page should be shown when a user visits the `/dns-query` DoH end point with a web browser.
+- Added "No Stack Trace" option in Settings > Logging section to enable logging only short error messages instead of full exception stack trace.
+- Updated SSO implementation to setup user info endpoint JSON key map for supported claim types.
+- Implemented support for Locally Served DNS Zones (RFC 6303) & Special-Use Domain Names (RFC 6761). The default `internal` zones are removed and they are now managed under this new implementation. A new option "Locally Served DNS Zones" is added in Settings > Recursion section to allow completely disabling these local zones. A single zone can be disabled/overridden by adding a Stub or Conditional Forwarder zone for it.
+- Updated TXT record implementation to allow configuring generic character-strings enabling support for Unicode strings.
+- Fixed issue in DNSSEC validation that caused the "missing RRSIG" validation failure issue in certain cases when the DNS server is configured to use forwarders.
+- Added new Health Check API `/api/dnsClient/healthCheck` to enable automated health check for the DNS server without causing query log entries.
+- Added new Status API `/api/status` obsoleting the SSO Status API `/api/sso/status`.
+- Updated List Zones API `/api/zones/list` to allow filtering zones by name and type.
+- Block Page App: Updated the app to support online signing for custom CA certificate configured in the app's config. Online signing now supports both RSA and ECDSA algorithms. Thanks to Roy Hagland (@Hemsby) for PR #1897.
+- Geo Continent & Geo Country Apps: Updated both apps to support creating custom groups in app config which can then be used with APP record's JSON config.
+- Multiple other minor bug fixes and improvements.
+
 ## Version 15.2
 Release Date: 9 May 2026
 

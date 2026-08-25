@@ -1,6 +1,6 @@
 ﻿/*
 Technitium DNS Server
-Copyright (C) 2025  Shreyas Zare (shreyas@technitium.com)
+Copyright (C) 2026  Shreyas Zare (shreyas@technitium.com)
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -94,20 +94,20 @@ namespace DnsServerCore.Dns.Zones
 
         #region private
 
-        private static IReadOnlyList<DnsResourceRecord> ValidateRRSet(DnsResourceRecordType type, IReadOnlyList<DnsResourceRecord> records, bool serveStale, bool skipSpecialCacheRecord)
+        private static IReadOnlyList<DnsResourceRecord> ValidateRRSet(IReadOnlyList<DnsResourceRecord> records, bool serveStale, bool skipSpecialCacheRecord)
         {
             foreach (DnsResourceRecord record in records)
             {
                 if (record.IsExpired(serveStale))
-                    return Array.Empty<DnsResourceRecord>(); //RR Set is expired
+                    return []; //RR Set is expired
 
                 if (skipSpecialCacheRecord && (record.RDATA is DnsCache.DnsSpecialCacheRecordData))
-                    return Array.Empty<DnsResourceRecord>(); //RR Set is special cache record
+                    return []; //RR Set is special cache record
             }
 
             if (records.Count > 1)
             {
-                switch (type)
+                switch (records[0].Type)
                 {
                     case DnsResourceRecordType.A:
                     case DnsResourceRecordType.AAAA:
@@ -178,15 +178,16 @@ namespace DnsServerCore.Dns.Zones
 
         #region public
 
-        public bool SetRecords(DnsResourceRecordType type, IReadOnlyList<DnsResourceRecord> records, bool serveStale)
+        public bool SetRecords(IReadOnlyList<DnsResourceRecord> records, bool serveStale)
         {
             if (records.Count == 0)
                 return false;
 
-            ConcurrentDictionary<DnsResourceRecordType, IReadOnlyList<DnsResourceRecord>> entries;
-
-            CacheRecordInfo cacheRecordInfo = records[0].GetCacheRecordInfo();
+            DnsResourceRecord firstRecord = records[0];
+            CacheRecordInfo cacheRecordInfo = firstRecord.GetCacheRecordInfo();
             NetworkAddress eDnsClientSubnet = cacheRecordInfo.EDnsClientSubnet;
+
+            ConcurrentDictionary<DnsResourceRecordType, IReadOnlyList<DnsResourceRecord>> entries;
 
             if (eDnsClientSubnet is null)
             {
@@ -209,15 +210,13 @@ namespace DnsServerCore.Dns.Zones
                 }
             }
 
-            bool isFailureRecord = false;
+            DnsResourceRecordType type = firstRecord.Type;
 
-            if (records[0].RDATA is DnsCache.DnsSpecialCacheRecordData splRecord)
+            if (firstRecord.RDATA is DnsCache.DnsSpecialCacheRecordData splRecord)
             {
                 if (splRecord.IsFailureOrBadCache)
                 {
                     //call trying to cache failure record
-                    isFailureRecord = true;
-
                     if (entries.TryGetValue(type, out IReadOnlyList<DnsResourceRecord> existingRecords) && (existingRecords.Count > 0) && !DnsResourceRecord.IsRRSetExpired(existingRecords, serveStale))
                     {
                         if ((existingRecords[0].RDATA is not DnsCache.DnsSpecialCacheRecordData existingSplRecord) || !existingSplRecord.IsFailureOrBadCache)
@@ -227,8 +226,49 @@ namespace DnsServerCore.Dns.Zones
                         splRecord.CopyExtendedDnsErrorsFrom(existingSplRecord);
                     }
                 }
+                else if (serveStale)
+                {
+                    //remove stale CNAME entry only when serve stale is enabled
+                    //making sure current record is not a failure record causing removal of useful stale CNAME record
+                    switch (type)
+                    {
+                        case DnsResourceRecordType.CNAME:
+                        case DnsResourceRecordType.SOA:
+                        case DnsResourceRecordType.NS:
+                        case DnsResourceRecordType.DS:
+                            //do nothing
+                            break;
+
+                        default:
+                            //remove stale CNAME entry since current new entry type overlaps any existing CNAME entry in cache
+                            //keeping both entries will create issue with serve stale implementation since stale CNAME entry will be always returned
+
+                            if (entries.TryGetValue(DnsResourceRecordType.CNAME, out IReadOnlyList<DnsResourceRecord> existingCNAMERecords))
+                            {
+                                if ((existingCNAMERecords.Count > 0) && (existingCNAMERecords[0].RDATA is DnsCNAMERecordData) && existingCNAMERecords[0].IsStale)
+                                {
+                                    //delete CNAME entry only when it contains stale DnsCNAMERecord RDATA and not special cache records
+                                    entries.TryRemove(DnsResourceRecordType.CNAME, out _);
+                                }
+                            }
+                            break;
+                    }
+                }
+
+                if (type == DnsResourceRecordType.NS)
+                {
+                    //remove expired CHILD_NS entry only when parent side NS record being cached is a special cache record
+                    if (entries.TryGetValue(DnsResourceRecordType.CHILD_NS, out IReadOnlyList<DnsResourceRecord> existingChildNSRecords))
+                    {
+                        if ((existingChildNSRecords.Count > 0) && (existingChildNSRecords[0].RDATA is DnsNSRecordData) && existingChildNSRecords[0].IsStale)
+                        {
+                            //delete CHILD_NS entry only when it contains expired records and not special cache records
+                            entries.TryRemove(DnsResourceRecordType.CHILD_NS, out _);
+                        }
+                    }
+                }
             }
-            else if (records[0].Type == DnsResourceRecordType.CHILD_NS)
+            else if (type == DnsResourceRecordType.CHILD_NS)
             {
                 //convert back RRSet to correct type
                 DnsResourceRecord[] newRecords = new DnsResourceRecord[records.Count];
@@ -260,35 +300,6 @@ namespace DnsServerCore.Dns.Zones
                 added = false;
                 return records;
             });
-
-            if (serveStale && !isFailureRecord)
-            {
-                //remove stale CNAME entry only when serve stale is enabled
-                //making sure current record is not a failure record causing removal of useful stale CNAME record
-                switch (type)
-                {
-                    case DnsResourceRecordType.CNAME:
-                    case DnsResourceRecordType.SOA:
-                    case DnsResourceRecordType.NS:
-                    case DnsResourceRecordType.DS:
-                        //do nothing
-                        break;
-
-                    default:
-                        //remove stale CNAME entry since current new entry type overlaps any existing CNAME entry in cache
-                        //keeping both entries will create issue with serve stale implementation since stale CNAME entry will be always returned
-
-                        if (entries.TryGetValue(DnsResourceRecordType.CNAME, out IReadOnlyList<DnsResourceRecord> existingCNAMERecords))
-                        {
-                            if ((existingCNAMERecords.Count > 0) && (existingCNAMERecords[0].RDATA is DnsCNAMERecordData) && existingCNAMERecords[0].IsStale)
-                            {
-                                //delete CNAME entry only when it contains stale DnsCNAMERecord RDATA and not special cache records
-                                entries.TryRemove(DnsResourceRecordType.CNAME, out _);
-                            }
-                        }
-                        break;
-                }
-            }
 
             return added;
         }
@@ -387,12 +398,12 @@ namespace DnsServerCore.Dns.Zones
             else
             {
                 if (_ecsEntries is null)
-                    return Array.Empty<DnsResourceRecord>();
+                    return [];
 
                 if (advancedForwardingClientSubnet)
                 {
                     if (!_ecsEntries.TryGetValue(eDnsClientSubnet, out entries))
-                        return Array.Empty<DnsResourceRecord>();
+                        return [];
                 }
                 else
                 {
@@ -417,7 +428,7 @@ namespace DnsServerCore.Dns.Zones
                     }
 
                     if (entries is null)
-                        return Array.Empty<DnsResourceRecord>();
+                        return [];
                 }
             }
 
@@ -427,7 +438,7 @@ namespace DnsServerCore.Dns.Zones
                     {
                         //since some zones have CNAME at apex so no CNAME lookup for DS queries!
                         if (entries.TryGetValue(type, out IReadOnlyList<DnsResourceRecord> existingRecords))
-                            return ValidateRRSet(type, existingRecords, serveStale, skipSpecialCacheRecord);
+                            return ValidateRRSet(existingRecords, serveStale, skipSpecialCacheRecord);
                     }
                     break;
 
@@ -436,11 +447,11 @@ namespace DnsServerCore.Dns.Zones
                     {
                         //since some zones have CNAME at apex!
                         if (entries.TryGetValue(type, out IReadOnlyList<DnsResourceRecord> existingRecords))
-                            return ValidateRRSet(type, existingRecords, serveStale, skipSpecialCacheRecord);
+                            return ValidateRRSet(existingRecords, serveStale, skipSpecialCacheRecord);
 
                         if (entries.TryGetValue(DnsResourceRecordType.CNAME, out IReadOnlyList<DnsResourceRecord> existingCNAMERecords))
                         {
-                            IReadOnlyList<DnsResourceRecord> rrset = ValidateRRSet(type, existingCNAMERecords, serveStale, skipSpecialCacheRecord);
+                            IReadOnlyList<DnsResourceRecord> rrset = ValidateRRSet(existingCNAMERecords, serveStale, skipSpecialCacheRecord);
                             if (rrset.Count > 0)
                             {
                                 if ((type == DnsResourceRecordType.CNAME) || (rrset[0].RDATA is DnsCNAMERecordData))
@@ -455,10 +466,14 @@ namespace DnsServerCore.Dns.Zones
 
                     foreach (KeyValuePair<DnsResourceRecordType, IReadOnlyList<DnsResourceRecord>> entry in entries)
                     {
-                        if (entry.Key == DnsResourceRecordType.DS)
-                            continue;
+                        switch (entry.Key)
+                        {
+                            case DnsResourceRecordType.DS:
+                            case DnsResourceRecordType.NS: //parent side NS
+                                continue;
+                        }
 
-                        anyRecords.AddRange(ValidateRRSet(type, entry.Value, serveStale, true));
+                        anyRecords.AddRange(ValidateRRSet(entry.Value, serveStale, true));
                     }
 
                     return anyRecords;
@@ -467,7 +482,7 @@ namespace DnsServerCore.Dns.Zones
                     {
                         if (entries.TryGetValue(DnsResourceRecordType.CNAME, out IReadOnlyList<DnsResourceRecord> existingCNAMERecords))
                         {
-                            IReadOnlyList<DnsResourceRecord> rrset = ValidateRRSet(type, existingCNAMERecords, serveStale, skipSpecialCacheRecord);
+                            IReadOnlyList<DnsResourceRecord> rrset = ValidateRRSet(existingCNAMERecords, serveStale, skipSpecialCacheRecord);
                             if (rrset.Count > 0)
                             {
                                 if ((type == DnsResourceRecordType.CNAME) || (rrset[0].RDATA is DnsCNAMERecordData))
@@ -475,13 +490,34 @@ namespace DnsServerCore.Dns.Zones
                             }
                         }
 
+                        switch (type)
+                        {
+                            case DnsResourceRecordType.NS: //normal NS query
+                                type = DnsResourceRecordType.CHILD_NS; //answer with child NS
+                                break;
+
+                            case DnsResourceRecordType.PARENT_NS: //explicit parent side NS query
+                                type = DnsResourceRecordType.NS; //answer with parent NS
+                                break;
+                        }
+
                         if (entries.TryGetValue(type, out IReadOnlyList<DnsResourceRecord> existingRecords))
-                            return ValidateRRSet(type, existingRecords, serveStale, skipSpecialCacheRecord);
+                            return ValidateRRSet(existingRecords, serveStale, skipSpecialCacheRecord);
+
+                        if (type == DnsResourceRecordType.CHILD_NS)
+                        {
+                            //child NS does not exist so check for parent side NS if that too does not exist
+                            if (entries.TryGetValue(DnsResourceRecordType.NS, out IReadOnlyList<DnsResourceRecord> existingParentNSRecords))
+                            {
+                                if ((existingParentNSRecords.Count > 0) && (existingParentNSRecords[0].RDATA is DnsCache.DnsSpecialCacheRecordData))
+                                    return ValidateRRSet(existingParentNSRecords, serveStale, skipSpecialCacheRecord); //parent side NS record does not exist so use this to answer for child NS queries
+                            }
+                        }
                     }
                     break;
             }
 
-            return Array.Empty<DnsResourceRecord>();
+            return [];
         }
 
         public override void ListAllRecords(List<DnsResourceRecord> records)
@@ -512,6 +548,23 @@ namespace DnsServerCore.Dns.Zones
                     continue;
 
                 if (record.RDATA is DnsNSRecordData)
+                    return true;
+            }
+
+            return false;
+        }
+
+        public override bool ContainsDNAMERecord()
+        {
+            if (!_entries.TryGetValue(DnsResourceRecordType.DNAME, out IReadOnlyList<DnsResourceRecord> records))
+                return false;
+
+            foreach (DnsResourceRecord record in records)
+            {
+                if (record.IsStale)
+                    continue;
+
+                if (record.RDATA is DnsDNAMERecordData)
                     return true;
             }
 

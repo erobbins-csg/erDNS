@@ -1,4 +1,4 @@
-#define DOTNET_VERSION "10.0.7"
+#define DOTNET_VERSION "10.0.9"
 
 [Setup]
 MinVersion=6.1sp1

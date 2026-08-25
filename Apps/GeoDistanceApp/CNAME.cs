@@ -36,8 +36,8 @@ namespace GeoDistance
     {
         #region variables
 
-        IDnsServer _dnsServer;
-        MaxMind _maxMind;
+        IDnsServer? _dnsServer;
+        MaxMind? _maxMind;
 
         #endregion
 
@@ -51,10 +51,7 @@ namespace GeoDistance
                 return;
 
             if (disposing)
-            {
-                if (_maxMind is not null)
-                    _maxMind.Dispose();
-            }
+                _maxMind?.Dispose();
 
             _disposed = true;
         }
@@ -83,7 +80,7 @@ namespace GeoDistance
 
         #region public
 
-        public Task InitializeAsync(IDnsServer dnsServer, string config)
+        public Task InitializeAsync(IDnsServer dnsServer, string? config)
         {
             _dnsServer = dnsServer;
             _maxMind = MaxMind.Create(dnsServer);
@@ -91,38 +88,41 @@ namespace GeoDistance
             return Task.CompletedTask;
         }
 
-        public Task<DnsDatagram> ProcessRequestAsync(DnsDatagram request, IPEndPoint remoteEP, DnsTransportProtocol protocol, bool isRecursionAllowed, string zoneName, string appRecordName, uint appRecordTtl, string appRecordData)
+        public Task<DnsDatagram?> ProcessRequestAsync(DnsDatagram request, IPEndPoint remoteEP, DnsTransportProtocol protocol, bool isRecursionAllowed, string zoneName, string appRecordName, uint appRecordTtl, string appRecordData)
         {
             DnsQuestionRecord question = request.Question[0];
 
             if (!question.Name.Equals(appRecordName, StringComparison.OrdinalIgnoreCase) && !appRecordName.StartsWith('*'))
-                return Task.FromResult<DnsDatagram>(null);
+                return Task.FromResult<DnsDatagram?>(null);
 
-            Location location = null;
+            if (_maxMind is null)
+                throw new InvalidOperationException("MaxMind database not initialized.");
+
+            Location? location = null;
 
             byte scopePrefixLength = 0;
             EDnsClientSubnetOptionData requestECS = request.GetEDnsClientSubnetOption();
             if (requestECS is not null)
             {
-                if ((_maxMind.IspReader is not null) && _maxMind.IspReader.TryIsp(requestECS.Address, out IspResponse csIsp) && (csIsp.Network is not null))
+                if ((_maxMind.IspReader is not null) && _maxMind.IspReader.TryIsp(requestECS.Address, out IspResponse? csIsp) && (csIsp.Network is not null))
                     scopePrefixLength = (byte)csIsp.Network.PrefixLength;
-                else if ((_maxMind.AsnReader is not null) && _maxMind.AsnReader.TryAsn(requestECS.Address, out AsnResponse csAsn) && (csAsn.Network is not null))
+                else if ((_maxMind.AsnReader is not null) && _maxMind.AsnReader.TryAsn(requestECS.Address, out AsnResponse? csAsn) && (csAsn.Network is not null))
                     scopePrefixLength = (byte)csAsn.Network.PrefixLength;
                 else
                     scopePrefixLength = requestECS.SourcePrefixLength;
 
-                if (_maxMind.CityReader.TryCity(requestECS.Address, out CityResponse csResponse) && csResponse.Location.HasCoordinates)
+                if (_maxMind.CityReader.TryCity(requestECS.Address, out CityResponse? csResponse) && csResponse.Location.HasCoordinates)
                     location = csResponse.Location;
             }
 
-            if ((location is null) && _maxMind.CityReader.TryCity(remoteEP.Address, out CityResponse response) && response.Location.HasCoordinates)
+            if ((location is null) && _maxMind.CityReader.TryCity(remoteEP.Address, out CityResponse? response) && response.Location.HasCoordinates)
                 location = response.Location;
 
             using JsonDocument jsonDocument = JsonDocument.Parse(appRecordData, Address._jsonParseOptions);
             JsonElement jsonAppRecordData = jsonDocument.RootElement;
             JsonElement jsonClosestServer = default;
 
-            if (location is null)
+            if ((location is null) || (location.Latitude is null) || (location.Longitude is null))
             {
                 if (jsonAppRecordData.GetArrayLength() > 0)
                     jsonClosestServer = jsonAppRecordData[0];
@@ -147,25 +147,25 @@ namespace GeoDistance
             }
 
             if (jsonClosestServer.ValueKind == JsonValueKind.Undefined)
-                return Task.FromResult<DnsDatagram>(null);
+                return Task.FromResult<DnsDatagram?>(null);
 
-            string cname = jsonClosestServer.GetPropertyValue("cname", null);
+            string? cname = jsonClosestServer.GetPropertyValue("cname", null);
             if (string.IsNullOrEmpty(cname))
-                return Task.FromResult<DnsDatagram>(null);
+                return Task.FromResult<DnsDatagram?>(null);
 
             IReadOnlyList<DnsResourceRecord> answers;
 
             if (question.Name.Equals(zoneName, StringComparison.OrdinalIgnoreCase)) //check for zone apex
-                answers = new DnsResourceRecord[] { new DnsResourceRecord(question.Name, DnsResourceRecordType.ANAME, DnsClass.IN, appRecordTtl, new DnsANAMERecordData(cname)) }; //use ANAME
+                answers = [new DnsResourceRecord(question.Name, DnsResourceRecordType.ANAME, DnsClass.IN, appRecordTtl, new DnsANAMERecordData(cname))]; //use ANAME
             else
-                answers = new DnsResourceRecord[] { new DnsResourceRecord(question.Name, DnsResourceRecordType.CNAME, DnsClass.IN, appRecordTtl, new DnsCNAMERecordData(cname)) };
+                answers = [new DnsResourceRecord(question.Name, DnsResourceRecordType.CNAME, DnsClass.IN, appRecordTtl, new DnsCNAMERecordData(cname))];
 
-            EDnsOption[] options = null;
+            EDnsOption[]? options = null;
 
             if (requestECS is not null)
                 options = EDnsClientSubnetOptionData.GetEDnsClientSubnetOption(requestECS.SourcePrefixLength, scopePrefixLength, requestECS.Address);
 
-            return Task.FromResult(new DnsDatagram(request.Identifier, true, request.OPCODE, true, false, request.RecursionDesired, isRecursionAllowed, false, false, DnsResponseCode.NoError, request.Question, answers, null, null, _dnsServer.UdpPayloadSize, EDnsHeaderFlags.None, options));
+            return Task.FromResult<DnsDatagram?>(new DnsDatagram(request.Identifier, true, request.OPCODE, true, false, request.RecursionDesired, isRecursionAllowed, false, false, DnsResponseCode.NoError, request.Question, answers, null, null, _dnsServer!.UdpPayloadSize, EDnsHeaderFlags.None, options));
         }
 
         #endregion

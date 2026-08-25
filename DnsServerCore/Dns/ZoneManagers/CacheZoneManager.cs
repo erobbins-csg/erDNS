@@ -243,7 +243,7 @@ namespace DnsServerCore.Dns.ZoneManagers
                     return new CacheZone(resourceRecord.Name, 1);
                 });
 
-                if (zone.SetRecords(resourceRecord.Type, resourceRecords, _dnsServer.ServeStale))
+                if (zone.SetRecords(resourceRecords, _dnsServer.ServeStale))
                     Interlocked.Increment(ref _totalEntries);
             }
             else
@@ -280,7 +280,7 @@ namespace DnsServerCore.Dns.ZoneManagers
 
                     foreach (KeyValuePair<DnsResourceRecordType, List<DnsResourceRecord>> groupedRecords in groupedByTypeRecords.Value)
                     {
-                        if (zone.SetRecords(groupedRecords.Key, groupedRecords.Value, serveStale))
+                        if (zone.SetRecords(groupedRecords.Value, serveStale))
                             addedEntries++;
                     }
                 }
@@ -406,24 +406,7 @@ namespace DnsServerCore.Dns.ZoneManagers
                 if (!_root.TryGet(cnameDomain, out CacheZone cacheZone))
                     break;
 
-                DnsResourceRecordType qtype;
-
-                switch (question.Type)
-                {
-                    case DnsResourceRecordType.NS:
-                        qtype = DnsResourceRecordType.CHILD_NS;
-                        break;
-
-                    case DnsResourceRecordType.PARENT_NS:
-                        qtype = DnsResourceRecordType.NS;
-                        break;
-
-                    default:
-                        qtype = question.Type;
-                        break;
-                }
-
-                IReadOnlyList<DnsResourceRecord> records = cacheZone.QueryRecords(qtype, serveStale, true, eDnsClientSubnet, advancedForwardingClientSubnet);
+                IReadOnlyList<DnsResourceRecord> records = cacheZone.QueryRecords(question.Type, serveStale, true, eDnsClientSubnet, advancedForwardingClientSubnet);
                 if (records.Count < 1)
                     break;
 
@@ -828,7 +811,7 @@ namespace DnsServerCore.Dns.ZoneManagers
                     return null;
 
                 //return closest name servers in delegation
-                IReadOnlyList<DnsResourceRecord> closestAuthority = delegation.QueryRecords(DnsResourceRecordType.NS, false, true, eDnsClientSubnet, advancedForwardingClientSubnet);
+                IReadOnlyList<DnsResourceRecord> closestAuthority = delegation.QueryRecords(DnsResourceRecordType.PARENT_NS, false, true, eDnsClientSubnet, advancedForwardingClientSubnet);
                 if ((closestAuthority.Count == 0) && (delegation.Name.Length == 0))
                     closestAuthority = delegation.QueryRecords(DnsResourceRecordType.CHILD_NS, false, true, eDnsClientSubnet, advancedForwardingClientSubnet); //root zone case
 
@@ -886,38 +869,16 @@ namespace DnsServerCore.Dns.ZoneManagers
             CacheZone delegation = null;
 
             if (findClosestNameServers)
-            {
                 zone = _root.FindZone(question.Name, out closest, out delegation);
-            }
             else
-            {
-                if (!_root.TryGet(question.Name, out zone))
-                    _ = _root.FindZone(question.Name, out closest, out _); //zone not found; attempt to find closest
-            }
+                _ = _root.TryGet(question.Name, out zone); //TryGet for optimization
 
-            bool dnssecOk = request.DnssecOk;
+            bool dnssecOk = request.DnssecOk && _dnsServer.DnssecValidation;
 
             if (zone is not null)
             {
                 //zone found
-                DnsResourceRecordType qtype;
-
-                switch (question.Type)
-                {
-                    case DnsResourceRecordType.NS:
-                        qtype = DnsResourceRecordType.CHILD_NS;
-                        break;
-
-                    case DnsResourceRecordType.PARENT_NS:
-                        qtype = DnsResourceRecordType.NS;
-                        break;
-
-                    default:
-                        qtype = question.Type;
-                        break;
-                }
-
-                IReadOnlyList<DnsResourceRecord> answer = zone.QueryRecords(qtype, serveStale, false, eDnsClientSubnet, advancedForwardingClientSubnet);
+                IReadOnlyList<DnsResourceRecord> answer = zone.QueryRecords(question.Type, serveStale, false, eDnsClientSubnet, advancedForwardingClientSubnet);
                 if (answer.Count > 0)
                 {
                     //answer found in cache
@@ -1134,59 +1095,60 @@ namespace DnsServerCore.Dns.ZoneManagers
                     return new DnsDatagram(request.Identifier, true, DnsOpcode.StandardQuery, false, false, request.RecursionDesired, true, dnssecOk && (answer.Count > 0) && (answer[0].DnssecStatus == DnssecStatus.Secure), request.CheckingDisabled, DnsResponseCode.NoError, request.Question, answer, authority, additional, request.EDNS is null ? ushort.MinValue : _dnsServer.UdpPayloadSize, ednsFlags, options);
                 }
             }
-            else
+
+            //zone or answer not found
+            if (!findClosestNameServers)
+                _ = _root.FindZone(question.Name, out closest, out _); //attempt to find closest since TryGet was used
+
+            //check for DNAME in closest zone
+            if (closest is not null)
             {
-                //zone not found
-                //check for DNAME in closest zone
-                if (closest is not null)
+                IReadOnlyList<DnsResourceRecord> answer = closest.QueryRecords(DnsResourceRecordType.DNAME, serveStale, true, eDnsClientSubnet, advancedForwardingClientSubnet);
+                if ((answer.Count > 0) && (answer[0].Type == DnsResourceRecordType.DNAME))
                 {
-                    IReadOnlyList<DnsResourceRecord> answer = closest.QueryRecords(DnsResourceRecordType.DNAME, serveStale, true, eDnsClientSubnet, advancedForwardingClientSubnet);
-                    if ((answer.Count > 0) && (answer[0].Type == DnsResourceRecordType.DNAME))
+                    DnsResponseCode rCode;
+
+                    if (DoDNAMESubstitution(question, answer, serveStale, eDnsClientSubnet, advancedForwardingClientSubnet, out answer))
+                        rCode = DnsResponseCode.NoError;
+                    else
+                        rCode = DnsResponseCode.YXDomain;
+
+                    IReadOnlyList<DnsResourceRecord> authority = null;
+                    EDnsHeaderFlags ednsFlags = EDnsHeaderFlags.None;
+
+                    if (dnssecOk)
                     {
-                        DnsResponseCode rCode;
-
-                        if (DoDNAMESubstitution(question, answer, serveStale, eDnsClientSubnet, advancedForwardingClientSubnet, out answer))
-                            rCode = DnsResponseCode.NoError;
-                        else
-                            rCode = DnsResponseCode.YXDomain;
-
-                        IReadOnlyList<DnsResourceRecord> authority = null;
-                        EDnsHeaderFlags ednsFlags = EDnsHeaderFlags.None;
-
-                        if (dnssecOk)
-                        {
-                            //DNSSEC enabled
-                            foreach (DnsResourceRecord record in answer)
-                            {
-                                if (record.DnssecStatus == DnssecStatus.Disabled)
-                                    goto beforeFindClosestNameServers; //dont return answer when status is disabled
-                            }
-
-                            //add RRSIG records
-                            AddRRSIGRecords(answer, out answer, out authority);
-
-                            ednsFlags = EDnsHeaderFlags.DNSSEC_OK;
-                        }
-
-                        if (resetExpiry)
-                        {
-                            foreach (DnsResourceRecord record in answer)
-                            {
-                                if (record.IsStale)
-                                    record.ResetExpiry(_serveStaleResetTtl); //reset expiry by 30 seconds so that resolver tries again only after 30 seconds as per RFC 8767
-                            }
-                        }
-
-                        EDnsOption[] options = null;
-
+                        //DNSSEC enabled
                         foreach (DnsResourceRecord record in answer)
                         {
-                            if (record.WasExpiryReset || record.IsStale)
-                                options = [new EDnsOption(EDnsOptionCode.EXTENDED_DNS_ERROR, new EDnsExtendedDnsErrorOptionData(EDnsExtendedDnsErrorCode.StaleAnswer, record.Name.ToLowerInvariant() + " " + record.Type.ToString() + " " + record.Class.ToString()))];
+                            if (record.DnssecStatus == DnssecStatus.Disabled)
+                                goto beforeFindClosestNameServers; //dont return answer when status is disabled
                         }
 
-                        return new DnsDatagram(request.Identifier, true, DnsOpcode.StandardQuery, false, false, request.RecursionDesired, true, dnssecOk && (answer.Count > 0) && (answer[0].DnssecStatus == DnssecStatus.Secure), request.CheckingDisabled, rCode, request.Question, answer, authority, null, request.EDNS is null ? ushort.MinValue : _dnsServer.UdpPayloadSize, ednsFlags, options);
+                        //add RRSIG records
+                        AddRRSIGRecords(answer, out answer, out authority);
+
+                        ednsFlags = EDnsHeaderFlags.DNSSEC_OK;
                     }
+
+                    if (resetExpiry)
+                    {
+                        foreach (DnsResourceRecord record in answer)
+                        {
+                            if (record.IsStale)
+                                record.ResetExpiry(_serveStaleResetTtl); //reset expiry by 30 seconds so that resolver tries again only after 30 seconds as per RFC 8767
+                        }
+                    }
+
+                    EDnsOption[] options = null;
+
+                    foreach (DnsResourceRecord record in answer)
+                    {
+                        if (record.WasExpiryReset || record.IsStale)
+                            options = [new EDnsOption(EDnsOptionCode.EXTENDED_DNS_ERROR, new EDnsExtendedDnsErrorOptionData(EDnsExtendedDnsErrorCode.StaleAnswer, record.Name.ToLowerInvariant() + " " + record.Type.ToString() + " " + record.Class.ToString()))];
+                    }
+
+                    return new DnsDatagram(request.Identifier, true, DnsOpcode.StandardQuery, false, false, request.RecursionDesired, true, dnssecOk && (answer.Count > 0) && (answer[0].DnssecStatus == DnssecStatus.Secure), request.CheckingDisabled, rCode, request.Question, answer, authority, null, request.EDNS is null ? ushort.MinValue : _dnsServer.UdpPayloadSize, ednsFlags, options);
                 }
             }
 
@@ -1211,7 +1173,7 @@ namespace DnsServerCore.Dns.ZoneManagers
 
                 while (true)
                 {
-                    IReadOnlyList<DnsResourceRecord> closestAuthority = delegation.QueryRecords(DnsResourceRecordType.NS, serveStale, true, eDnsClientSubnet, advancedForwardingClientSubnet);
+                    IReadOnlyList<DnsResourceRecord> closestAuthority = delegation.QueryRecords(DnsResourceRecordType.PARENT_NS, serveStale, true, eDnsClientSubnet, advancedForwardingClientSubnet);
                     if ((closestAuthority.Count == 0) && (delegation.Name.Length == 0))
                         closestAuthority = delegation.QueryRecords(DnsResourceRecordType.CHILD_NS, serveStale, true, eDnsClientSubnet, advancedForwardingClientSubnet); //root zone case
 

@@ -58,12 +58,12 @@ namespace Failover
         int _retries;
         int _timeout;
         int _port;
-        Uri _url;
-        EmailAlert _emailAlert;
-        WebHook _webHook;
+        Uri? _url;
+        EmailAlert? _emailAlert;
+        WebHook? _webHook;
 
-        HttpClientNetworkHandler _httpHandler;
-        HttpClient _httpClient;
+        HttpClientNetworkHandler? _httpHandler;
+        HttpClient? _httpClient;
 
         #endregion
 
@@ -124,7 +124,7 @@ namespace Failover
                 case HealthCheckType.Http:
                 case HealthCheckType.Https:
                     bool handlerChanged = false;
-                    NetProxy proxy = _service.DnsServer.Proxy;
+                    NetProxy? proxy = _service.DnsServer.Proxy;
 
                     if (_httpHandler is null)
                     {
@@ -215,17 +215,17 @@ namespace Failover
             _timeout = jsonHealthCheck.GetPropertyValue("timeout", 10) * 1000;
             _port = jsonHealthCheck.GetPropertyValue("port", 80);
 
-            if (jsonHealthCheck.TryGetProperty("url", out JsonElement jsonUrl) && (jsonUrl.ValueKind != JsonValueKind.Null))
-                _url = new Uri(jsonUrl.GetString());
+            if (jsonHealthCheck.TryGetProperty("url", out JsonElement jsonUrl) && (jsonUrl.ValueKind == JsonValueKind.String))
+                _url = new Uri(jsonUrl.GetString()!);
             else
                 _url = null;
 
-            if (jsonHealthCheck.TryGetProperty("emailAlert", out JsonElement jsonEmailAlert) && _service.EmailAlerts.TryGetValue(jsonEmailAlert.GetString(), out EmailAlert emailAlert))
+            if (jsonHealthCheck.TryGetProperty("emailAlert", out JsonElement jsonEmailAlert) && (jsonEmailAlert.ValueKind == JsonValueKind.String) && _service.EmailAlerts.TryGetValue(jsonEmailAlert.GetString()!, out EmailAlert? emailAlert))
                 _emailAlert = emailAlert;
             else
                 _emailAlert = null;
 
-            if (jsonHealthCheck.TryGetProperty("webHook", out JsonElement jsonWebHook) && _service.WebHooks.TryGetValue(jsonWebHook.GetString(), out WebHook webHook))
+            if (jsonHealthCheck.TryGetProperty("webHook", out JsonElement jsonWebHook) && (jsonWebHook.ValueKind == JsonValueKind.String) && _service.WebHooks.TryGetValue(jsonWebHook.GetString()!, out WebHook? webHook))
                 _webHook = webHook;
             else
                 _webHook = null;
@@ -233,7 +233,7 @@ namespace Failover
             ConditionalHttpReload();
         }
 
-        public async Task<HealthCheckResponse> IsHealthyAsync(string domain, DnsResourceRecordType type, Uri healthCheckUrl)
+        public async Task<HealthCheckResponse> IsHealthyAsync(string domain, DnsResourceRecordType type, Uri? healthCheckUrl)
         {
             switch (type)
             {
@@ -246,7 +246,7 @@ namespace Failover
                         IReadOnlyList<IPAddress> addresses = DnsClient.ParseResponseA(response);
                         if (addresses.Count > 0)
                         {
-                            HealthCheckResponse lastResponse = null;
+                            HealthCheckResponse? lastResponse = null;
 
                             foreach (IPAddress address in addresses)
                             {
@@ -255,7 +255,8 @@ namespace Failover
                                     return lastResponse;
                             }
 
-                            return lastResponse;
+                            if (lastResponse is not null)
+                                return lastResponse;
                         }
 
                         return new HealthCheckResponse(HealthStatus.Failed, "Failed to resolve address.");
@@ -270,7 +271,7 @@ namespace Failover
                         IReadOnlyList<IPAddress> addresses = DnsClient.ParseResponseAAAA(response);
                         if (addresses.Count > 0)
                         {
-                            HealthCheckResponse lastResponse = null;
+                            HealthCheckResponse? lastResponse = null;
 
                             foreach (IPAddress address in addresses)
                             {
@@ -279,7 +280,8 @@ namespace Failover
                                     return lastResponse;
                             }
 
-                            return lastResponse;
+                            if (lastResponse is not null)
+                                return lastResponse;
                         }
 
                         return new HealthCheckResponse(HealthStatus.Failed, "Failed to resolve address.");
@@ -290,7 +292,7 @@ namespace Failover
             }
         }
 
-        public async Task<HealthCheckResponse> IsHealthyAsync(IPAddress address, Uri healthCheckUrl)
+        public async Task<HealthCheckResponse> IsHealthyAsync(IPAddress address, Uri? healthCheckUrl)
         {
             foreach (KeyValuePair<NetworkAddress, bool> network in _service.UnderMaintenance)
             {
@@ -331,13 +333,13 @@ namespace Failover
                 case HealthCheckType.Tcp:
                     {
                         Exception lastException;
-                        string lastReason = null;
+                        string? lastReason = null;
                         int retry = 0;
                         do
                         {
                             try
                             {
-                                NetProxy proxy = _service.DnsServer.Proxy;
+                                NetProxy? proxy = _service.DnsServer.Proxy;
 
                                 if (proxy is null)
                                 {
@@ -388,13 +390,13 @@ namespace Failover
                         ConditionalHttpReload();
 
                         Exception lastException;
-                        string lastReason = null;
+                        string? lastReason = null;
                         int retry = 0;
                         do
                         {
                             try
                             {
-                                Uri url;
+                                Uri? url;
 
                                 if (_url is null)
                                     url = healthCheckUrl;
@@ -424,7 +426,7 @@ namespace Failover
                                 else
                                     httpRequest.Headers.Host = url.Host + ":" + url.Port;
 
-                                HttpResponseMessage httpResponse = await _httpClient.SendAsync(httpRequest);
+                                HttpResponseMessage httpResponse = await _httpClient!.SendAsync(httpRequest);
                                 if (httpResponse.IsSuccessStatusCode)
                                     return new HealthCheckResponse(HealthStatus.Healthy);
 
@@ -477,13 +479,13 @@ namespace Failover
         public int Port
         { get { return _port; } }
 
-        public Uri Url
+        public Uri? Url
         { get { return _url; } }
 
-        public EmailAlert EmailAlert
+        public EmailAlert? EmailAlert
         { get { return _emailAlert; } }
 
-        public WebHook WebHook
+        public WebHook? WebHook
         { get { return _webHook; } }
 
         #endregion

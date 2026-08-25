@@ -20,6 +20,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 using DnsServerCore.ApplicationCommon;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.IO;
 using System.Net;
@@ -43,9 +44,9 @@ namespace DnsBlockList
 
         readonly static JsonDocumentOptions _jsonParseOptions = new JsonDocumentOptions() { CommentHandling = JsonCommentHandling.Skip };
 
-        IDnsServer _dnsServer;
+        IDnsServer? _dnsServer;
 
-        Dictionary<string, BlockList> _dnsBlockLists;
+        Dictionary<string, BlockList>? _dnsBlockLists;
 
         #endregion
 
@@ -66,7 +67,7 @@ namespace DnsBlockList
 
         #region private
 
-        private static bool TryParseDnsblDomain(string qName, string appRecordName, out IPAddress address, out string domain)
+        private static bool TryParseDnsblDomain(string qName, string appRecordName, out IPAddress? address, out string? domain)
         {
             qName = qName.Substring(0, qName.Length - appRecordName.Length - 1);
 
@@ -122,10 +123,10 @@ namespace DnsBlockList
         private Tuple<string, BlockList> ReadBlockList(JsonElement jsonBlockList)
         {
             BlockList blockList;
-            string name = jsonBlockList.GetProperty("name").GetString();
+            string name = jsonBlockList.GetProperty("name").ToString();
             BlockListType type = jsonBlockList.GetPropertyEnumValue("type", BlockListType.Ip);
 
-            if ((_dnsBlockLists is not null) && _dnsBlockLists.TryGetValue(name, out BlockList existingBlockList) && (existingBlockList.Type == type))
+            if ((_dnsBlockLists is not null) && _dnsBlockLists.TryGetValue(name, out BlockList? existingBlockList) && (existingBlockList.Type == type))
             {
                 existingBlockList.ReloadConfig(jsonBlockList);
                 blockList = existingBlockList;
@@ -135,11 +136,11 @@ namespace DnsBlockList
                 switch (type)
                 {
                     case BlockListType.Ip:
-                        blockList = new IpBlockList(_dnsServer, jsonBlockList);
+                        blockList = new IpBlockList(_dnsServer!, jsonBlockList);
                         break;
 
                     case BlockListType.Domain:
-                        blockList = new DomainBlockList(_dnsServer, jsonBlockList);
+                        blockList = new DomainBlockList(_dnsServer!, jsonBlockList);
                         break;
 
                     default:
@@ -154,14 +155,17 @@ namespace DnsBlockList
 
         #region public
 
-        public Task InitializeAsync(IDnsServer dnsServer, string config)
+        public Task InitializeAsync(IDnsServer dnsServer, string? config)
         {
             _dnsServer = dnsServer;
+
+            if (config is null)
+                throw new InvalidOperationException();
 
             using JsonDocument jsonDocument = JsonDocument.Parse(config, _jsonParseOptions);
             JsonElement jsonConfig = jsonDocument.RootElement;
 
-            if (jsonConfig.TryReadArrayAsMap("dnsBlockLists", ReadBlockList, out Dictionary<string, BlockList> dnsBlockLists))
+            if (jsonConfig.TryReadArrayAsMap("dnsBlockLists", ReadBlockList, out Dictionary<string, BlockList>? dnsBlockLists) && (dnsBlockLists is not null))
             {
                 if (_dnsBlockLists is not null)
                 {
@@ -188,7 +192,7 @@ namespace DnsBlockList
             return Task.CompletedTask;
         }
 
-        public async Task<DnsDatagram> ProcessRequestAsync(DnsDatagram request, IPEndPoint remoteEP, DnsTransportProtocol protocol, bool isRecursionAllowed, string zoneName, string appRecordName, uint appRecordTtl, string appRecordData)
+        public async Task<DnsDatagram?> ProcessRequestAsync(DnsDatagram request, IPEndPoint remoteEP, DnsTransportProtocol protocol, bool isRecursionAllowed, string zoneName, string appRecordName, uint appRecordTtl, string appRecordData)
         {
             DnsQuestionRecord question = request.Question[0];
             string qname = question.Name;
@@ -196,23 +200,23 @@ namespace DnsBlockList
             if (qname.Length == appRecordName.Length)
                 return null;
 
-            if ((_dnsBlockLists is null) || !TryParseDnsblDomain(qname, appRecordName, out IPAddress address, out string domain))
+            if ((_dnsBlockLists is null) || !TryParseDnsblDomain(qname, appRecordName, out IPAddress? address, out string? domain))
                 return null;
 
             using JsonDocument jsonDocument = JsonDocument.Parse(appRecordData, _jsonParseOptions);
             JsonElement jsonAppRecordData = jsonDocument.RootElement;
 
-            if (jsonAppRecordData.TryReadArray("dnsBlockLists", out string[] dnsBlockLists))
+            if (jsonAppRecordData.TryReadArray("dnsBlockLists", out string[]? dnsBlockLists) && (dnsBlockLists is not null))
             {
                 bool isBlocked = false;
-                IPAddress responseA = null;
-                string responseTXT = null;
+                IPAddress? responseA = null;
+                string? responseTXT = null;
 
                 if (address is not null)
                 {
                     foreach (string dnsBlockList in dnsBlockLists)
                     {
-                        if (_dnsBlockLists.TryGetValue(dnsBlockList, out BlockList blockList) && blockList.Enabled && (blockList.Type == BlockListType.Ip) && blockList.IsBlocked(address, out responseA, out responseTXT))
+                        if (_dnsBlockLists.TryGetValue(dnsBlockList, out BlockList? blockList) && blockList.Enabled && (blockList.Type == BlockListType.Ip) && blockList.IsBlocked(address, out responseA, out responseTXT))
                         {
                             isBlocked = true;
 
@@ -227,7 +231,7 @@ namespace DnsBlockList
                 {
                     foreach (string dnsBlockList in dnsBlockLists)
                     {
-                        if (_dnsBlockLists.TryGetValue(dnsBlockList, out BlockList blockList) && blockList.Enabled && (blockList.Type == BlockListType.Domain) && blockList.IsBlocked(domain, out string foundDomain, out responseA, out responseTXT))
+                        if (_dnsBlockLists.TryGetValue(dnsBlockList, out BlockList? blockList) && blockList.Enabled && (blockList.Type == BlockListType.Domain) && blockList.IsBlocked(domain, out string? foundDomain, out responseA, out responseTXT))
                         {
                             isBlocked = true;
 
@@ -254,7 +258,7 @@ namespace DnsBlockList
                     }
 
                     //NODATA response
-                    DnsDatagram soaResponse = await _dnsServer.DirectQueryAsync(new DnsQuestionRecord(zoneName, DnsResourceRecordType.SOA, DnsClass.IN));
+                    DnsDatagram soaResponse = await _dnsServer!.DirectQueryAsync(new DnsQuestionRecord(zoneName, DnsResourceRecordType.SOA, DnsClass.IN));
 
                     return new DnsDatagram(request.Identifier, true, DnsOpcode.StandardQuery, true, false, request.RecursionDesired, isRecursionAllowed, false, false, DnsResponseCode.NoError, request.Question, null, soaResponse.Answer);
                 }
@@ -302,13 +306,13 @@ namespace DnsBlockList
 
             readonly string _name;
             bool _enabled;
-            protected IPAddress _responseA;
-            protected string _responseTXT;
-            protected string _blockListFile;
+            protected IPAddress? _responseA;
+            protected string? _responseTXT;
+            protected string? _blockListFile;
 
             protected DateTime _blockListFileLastModified;
 
-            Timer _autoReloadTimer;
+            Timer? _autoReloadTimer;
             const int AUTO_RELOAD_TIMER_INTERVAL = 60000;
 
             #endregion
@@ -320,13 +324,13 @@ namespace DnsBlockList
                 _dnsServer = dnsServer;
                 _type = type;
 
-                _name = jsonBlockList.GetProperty("name").GetString();
+                _name = jsonBlockList.GetProperty("name").ToString();
 
-                _autoReloadTimer = new Timer(delegate (object state)
+                _autoReloadTimer = new Timer(delegate (object? state)
                 {
                     try
                     {
-                        DateTime blockListFileLastModified = File.GetLastWriteTimeUtc(_blockListFile);
+                        DateTime blockListFileLastModified = File.GetLastWriteTimeUtc(_blockListFile!);
                         if (blockListFileLastModified > _blockListFileLastModified)
                             ReloadBlockListFile();
                     }
@@ -400,26 +404,26 @@ namespace DnsBlockList
                 else
                     _responseTXT = null;
 
-                string blockListFile = jsonBlockList.GetProperty("blockListFile").GetString();
+                string blockListFile = jsonBlockList.GetProperty("blockListFile").ToString();
 
                 if (!Path.IsPathRooted(blockListFile))
                     blockListFile = Path.Combine(_dnsServer.ApplicationFolder, blockListFile);
 
-                if (!blockListFile.Equals(_blockListFile))
+                if (!blockListFile.Equals(_blockListFile, StringComparison.Ordinal))
                 {
                     _blockListFile = blockListFile;
                     _blockListFileLastModified = default;
                 }
 
-                _autoReloadTimer.Change(0, Timeout.Infinite);
+                _autoReloadTimer?.Change(0, Timeout.Infinite);
             }
 
-            public virtual bool IsBlocked(IPAddress address, out IPAddress responseA, out string responseTXT)
+            public virtual bool IsBlocked(IPAddress address, out IPAddress? responseA, out string? responseTXT)
             {
                 throw new InvalidOperationException();
             }
 
-            public virtual bool IsBlocked(string domain, out string foundDomain, out IPAddress responseA, out string responseTXT)
+            public virtual bool IsBlocked(string domain, [MaybeNullWhen(false)] out string foundDomain, out IPAddress? responseA, out string? responseTXT)
             {
                 throw new InvalidOperationException();
             }
@@ -437,13 +441,13 @@ namespace DnsBlockList
             public bool Enabled
             { get { return _enabled; } }
 
-            public IPAddress ResponseA
+            public IPAddress? ResponseA
             { get { return _responseA; } }
 
-            public string ResponseTXT
+            public string? ResponseTXT
             { get { return _responseTXT; } }
 
-            public string BlockListFile
+            public string? BlockListFile
             { get { return _blockListFile; } }
 
             #endregion
@@ -454,8 +458,8 @@ namespace DnsBlockList
             #region variables
 
             readonly T _key;
-            readonly IPAddress _responseA;
-            readonly string _responseTXT;
+            readonly IPAddress? _responseA;
+            readonly string? _responseTXT;
 
             #endregion
 
@@ -465,7 +469,7 @@ namespace DnsBlockList
             {
                 _key = key;
 
-                if (IPAddress.TryParse(responseA, out IPAddress addr))
+                if (IPAddress.TryParse(responseA, out IPAddress? addr))
                     _responseA = addr;
 
                 if (!string.IsNullOrEmpty(responseTXT))
@@ -479,10 +483,10 @@ namespace DnsBlockList
             public T Key
             { get { return _key; } }
 
-            public IPAddress ResponseA
+            public IPAddress? ResponseA
             { get { return _responseA; } }
 
-            public string ResponseTXT
+            public string? ResponseTXT
             { get { return _responseTXT; } }
 
             #endregion
@@ -492,10 +496,10 @@ namespace DnsBlockList
         {
             #region variables
 
-            Dictionary<IPAddress, BlockEntry<IPAddress>> _ipv4Map;
-            Dictionary<IPAddress, BlockEntry<IPAddress>> _ipv6Map;
-            NetworkMap<BlockEntry<NetworkAddress>> _ipv4NetworkMap;
-            NetworkMap<BlockEntry<NetworkAddress>> _ipv6NetworkMap;
+            Dictionary<IPAddress, BlockEntry<IPAddress>>? _ipv4Map;
+            Dictionary<IPAddress, BlockEntry<IPAddress>>? _ipv6Map;
+            NetworkMap<BlockEntry<NetworkAddress>>? _ipv4NetworkMap;
+            NetworkMap<BlockEntry<NetworkAddress>>? _ipv6NetworkMap;
 
             #endregion
 
@@ -524,10 +528,10 @@ namespace DnsBlockList
                     ipv4Addresses.Enqueue(new BlockEntry<IPAddress>(IPAddress.Parse("127.0.0.2"), "127.0.0.2", "rfc5782 test entry"));
                     ipv6Addresses.Enqueue(new BlockEntry<IPAddress>(IPAddress.Parse("::FFFF:7F00:2"), "127.0.0.2", "rfc5782 test entry"));
 
-                    using (FileStream fS = new FileStream(_blockListFile, FileMode.Open, FileAccess.Read))
+                    using (FileStream fS = new FileStream(_blockListFile!, FileMode.Open, FileAccess.Read))
                     {
                         StreamReader sR = new StreamReader(fS, true);
-                        string line;
+                        string? line;
                         string network;
                         string responseA;
                         string responseTXT;
@@ -619,7 +623,7 @@ namespace DnsBlockList
                 }
                 catch (Exception ex)
                 {
-                    _dnsServer.WriteLog("The app failed to read IP block list file: " + _blockListFile + "\r\n" + ex.ToString());
+                    _dnsServer.WriteLog("The app failed to read IP block list file: " + _blockListFile, ex);
                 }
             }
 
@@ -627,20 +631,20 @@ namespace DnsBlockList
 
             #region public
 
-            public override bool IsBlocked(IPAddress address, out IPAddress responseA, out string responseTXT)
+            public override bool IsBlocked(IPAddress address, out IPAddress? responseA, out string? responseTXT)
             {
                 switch (address.AddressFamily)
                 {
                     case AddressFamily.InterNetwork:
                         {
-                            if (_ipv4Map.TryGetValue(address, out BlockEntry<IPAddress> ipEntry))
+                            if ((_ipv4Map is not null) && _ipv4Map.TryGetValue(address, out BlockEntry<IPAddress>? ipEntry))
                             {
                                 responseA = ipEntry.ResponseA is null ? _responseA : ipEntry.ResponseA;
                                 responseTXT = ipEntry.ResponseTXT is null ? _responseTXT : ipEntry.ResponseTXT;
                                 return true;
                             }
 
-                            if (_ipv4NetworkMap.TryGetValue(address, out BlockEntry<NetworkAddress> networkEntry))
+                            if ((_ipv4NetworkMap is not null) && _ipv4NetworkMap.TryGetValue(address, out BlockEntry<NetworkAddress>? networkEntry))
                             {
                                 responseA = networkEntry.ResponseA is null ? _responseA : networkEntry.ResponseA;
                                 responseTXT = networkEntry.ResponseTXT is null ? _responseTXT : networkEntry.ResponseTXT;
@@ -651,14 +655,14 @@ namespace DnsBlockList
 
                     case AddressFamily.InterNetworkV6:
                         {
-                            if (_ipv6Map.TryGetValue(address, out BlockEntry<IPAddress> ipEntry))
+                            if ((_ipv6Map is not null) && _ipv6Map.TryGetValue(address, out BlockEntry<IPAddress>? ipEntry))
                             {
                                 responseA = ipEntry.ResponseA is null ? _responseA : ipEntry.ResponseA;
                                 responseTXT = ipEntry.ResponseTXT is null ? _responseTXT : ipEntry.ResponseTXT;
                                 return true;
                             }
 
-                            if (_ipv6NetworkMap.TryGetValue(address, out BlockEntry<NetworkAddress> networkEntry))
+                            if ((_ipv6NetworkMap is not null) && _ipv6NetworkMap.TryGetValue(address, out BlockEntry<NetworkAddress>? networkEntry))
                             {
                                 responseA = networkEntry.ResponseA is null ? _responseA : networkEntry.ResponseA;
                                 responseTXT = networkEntry.ResponseTXT is null ? _responseTXT : networkEntry.ResponseTXT;
@@ -680,7 +684,7 @@ namespace DnsBlockList
         {
             #region variables
 
-            Dictionary<string, BlockEntry<string>> _domainMap;
+            Dictionary<string, BlockEntry<string>>? _domainMap;
 
             #endregion
 
@@ -705,11 +709,11 @@ namespace DnsBlockList
 
                     domains.Enqueue(new BlockEntry<string>("test", "127.0.0.2", "rfc5782 test entry"));
 
-                    using (FileStream fS = new FileStream(_blockListFile, FileMode.Open, FileAccess.Read))
+                    using (FileStream fS = new FileStream(_blockListFile!, FileMode.Open, FileAccess.Read))
                     {
                         StreamReader sR = new StreamReader(fS, true);
                         char[] trimSeperator = new char[] { ' ', '\t', ':', '|', ',' };
-                        string line;
+                        string? line;
                         string domain;
                         string responseA;
                         string responseTXT;
@@ -755,7 +759,7 @@ namespace DnsBlockList
                 }
                 catch (Exception ex)
                 {
-                    _dnsServer.WriteLog("The app failed to read domain block list file: " + _blockListFile + "\r\n" + ex.ToString());
+                    _dnsServer.WriteLog("The app failed to read domain block list file: " + _blockListFile, ex);
                 }
             }
 
@@ -763,7 +767,7 @@ namespace DnsBlockList
 
             #region private
 
-            private static string GetParentZone(string domain)
+            private static string? GetParentZone(string domain)
             {
                 int i = domain.IndexOf('.');
                 if (i > -1)
@@ -773,19 +777,23 @@ namespace DnsBlockList
                 return null;
             }
 
-            private bool IsDomainBlocked(string domain, out BlockEntry<string> domainEntry)
+            private bool IsDomainBlocked(string domain, [MaybeNullWhen(false)] out BlockEntry<string> domainEntry)
             {
-                do
+                if (_domainMap is not null)
                 {
-                    if (_domainMap.TryGetValue(domain, out domainEntry))
+                    do
                     {
-                        return true;
+                        if (_domainMap.TryGetValue(domain, out domainEntry))
+                        {
+                            return true;
+                        }
+
+                        domain = GetParentZone(domain)!;
                     }
-
-                    domain = GetParentZone(domain);
+                    while (domain is not null);
                 }
-                while (domain is not null);
 
+                domainEntry = null;
                 return false;
             }
 
@@ -793,9 +801,9 @@ namespace DnsBlockList
 
             #region public
 
-            public override bool IsBlocked(string domain, out string foundDomain, out IPAddress responseA, out string responseTXT)
+            public override bool IsBlocked(string domain, [MaybeNullWhen(false)] out string foundDomain, out IPAddress? responseA, out string? responseTXT)
             {
-                if (IsDomainBlocked(domain.ToLowerInvariant(), out BlockEntry<string> domainEntry))
+                if (IsDomainBlocked(domain.ToLowerInvariant(), out BlockEntry<string>? domainEntry))
                 {
                     foundDomain = domainEntry.Key;
                     responseA = domainEntry.ResponseA is null ? _responseA : domainEntry.ResponseA;

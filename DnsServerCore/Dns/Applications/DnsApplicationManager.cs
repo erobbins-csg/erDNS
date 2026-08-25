@@ -29,6 +29,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using TechnitiumLibrary.IO;
 using TechnitiumLibrary.Net.Http.Client;
 
 namespace DnsServerCore.Dns.Applications
@@ -225,7 +226,7 @@ namespace DnsServerCore.Dns.Applications
                             foreach (JsonElement jsonStoreApp in jsonStoreAppsArray.EnumerateArray())
                             {
                                 string name = jsonStoreApp.GetProperty("name").GetString();
-                                if (name.Equals(application.Name))
+                                if (name.Equals(application.Name, StringComparison.Ordinal))
                                 {
                                     string url = null;
                                     Version storeAppVersion = null;
@@ -259,7 +260,7 @@ namespace DnsServerCore.Dns.Applications
                                         }
                                         catch (Exception ex)
                                         {
-                                            _dnsServer.LogManager.Write("Failed to automatically download and update DNS application '" + application.Name + "': " + ex.ToString());
+                                            _dnsServer.LogManager.Write("Failed to automatically download and update DNS application '" + application.Name + "'.", ex);
                                         }
                                     }
 
@@ -352,7 +353,7 @@ namespace DnsServerCore.Dns.Applications
                     }
                     catch (Exception ex)
                     {
-                        _dnsServer.LogManager.Write("DNS Server failed to load DNS application: " + Path.GetFileName(applicationFolder) + "\r\n" + ex.ToString());
+                        _dnsServer.LogManager.Write("DNS Server failed to load DNS application: " + Path.GetFileName(applicationFolder), ex);
                     }
                 }));
             }
@@ -373,7 +374,9 @@ namespace DnsServerCore.Dns.Applications
             if (_applications.ContainsKey(applicationName))
                 throw new DnsServerException("DNS application already exists: " + applicationName);
 
-            string applicationFolder = Path.Combine(_appsPath, applicationName);
+            string applicationFolder = Path.GetFullPath(Path.Combine(_appsPath, applicationName));
+            if (!applicationFolder.StartsWith(_appsPath + Path.DirectorySeparatorChar))
+                throw new DnsServerException("The application name is invalid: " + applicationName);
 
             if (Directory.Exists(applicationFolder))
                 Directory.Delete(applicationFolder, true);
@@ -387,16 +390,18 @@ namespace DnsServerCore.Dns.Applications
 
                 zipCopyStream.Position = 0;
 
-                using (ZipArchive appZip = new ZipArchive(zipCopyStream, ZipArchiveMode.Read, false, Encoding.UTF8))
+                await using (ZipArchive appZip = new ZipArchive(zipCopyStream, ZipArchiveMode.Read, false, Encoding.UTF8))
                 {
                     try
                     {
-                        appZip.ExtractToDirectory(applicationFolder, true);
+                        await appZip.ExtractToDirectoryAsync(applicationFolder, true);
 
                         return await LoadApplicationAsync(applicationFolder, true);
                     }
                     catch
                     {
+                        await appZip.DisposeAsync();
+
                         if (Directory.Exists(applicationFolder))
                             Directory.Delete(applicationFolder, true);
 
@@ -420,25 +425,31 @@ namespace DnsServerCore.Dns.Applications
 
                 zipCopyStream.Position = 0;
 
-                using (ZipArchive appZip = new ZipArchive(zipCopyStream, ZipArchiveMode.Read, false, Encoding.UTF8))
+                await using (ZipArchive appZip = new ZipArchive(zipCopyStream, ZipArchiveMode.Read, false, Encoding.UTF8))
                 {
                     UnloadApplication(applicationName);
 
                     foreach (ZipArchiveEntry entry in appZip.Entries)
                     {
-                        string entryPath = entry.FullName;
-
-                        if (Path.DirectorySeparatorChar != '/')
-                            entryPath = entryPath.Replace('/', '\\');
-
-                        string filePath = Path.Combine(applicationFolder, entryPath);
+                        string filePath = Path.GetFullPath(Path.Combine(applicationFolder, entry.FullName));
+                        if (!filePath.StartsWith(applicationFolder + Path.DirectorySeparatorChar))
+                            throw new IOException("Extracting Zip entry would have resulted in a file outside the specified destination directory.");
 
                         if ((entry.Name == "dnsApp.config") && File.Exists(filePath))
                             continue; //avoid overwriting existing config file
 
-                        Directory.CreateDirectory(Path.GetDirectoryName(filePath));
+                        if ((entry.Length == 0) && (entry.Name.Length == 0) && entry.FullName.EndsWith('/'))
+                        {
+                            //directory entry
+                            Directory.CreateDirectory(filePath);
+                        }
+                        else
+                        {
+                            //file entry
+                            Directory.CreateDirectory(Path.GetDirectoryName(filePath));
 
-                        entry.ExtractToFile(filePath, true);
+                            await entry.ExtractToFileAsync(filePath, true);
+                        }
                     }
 
                     return await LoadApplicationAsync(applicationFolder, true);
@@ -484,9 +495,14 @@ namespace DnsServerCore.Dns.Applications
 
                     using (HttpClient http = new HttpClient(handler))
                     {
-                        await using (Stream httpStream = await http.GetStreamAsync(uri))
+                        HttpResponseMessage httpResponse = await http.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead);
+
+                        httpResponse.EnsureSuccessStatusCode();
+
+                        await using (Stream httpStream = await httpResponse.Content.ReadAsStreamAsync())
                         {
-                            await httpStream.CopyToAsync(fS);
+                            //copy stream with idle timeout
+                            await httpStream.CopyToAsync(fS, TimeSpan.FromSeconds(60));
                         }
                     }
 
@@ -523,9 +539,14 @@ namespace DnsServerCore.Dns.Applications
 
                     using (HttpClient http = new HttpClient(handler))
                     {
-                        await using (Stream httpStream = await http.GetStreamAsync(uri))
+                        HttpResponseMessage httpResponse = await http.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead);
+
+                        httpResponse.EnsureSuccessStatusCode();
+
+                        await using (Stream httpStream = await httpResponse.Content.ReadAsStreamAsync())
                         {
-                            await httpStream.CopyToAsync(fS);
+                            //copy stream with idle timeout
+                            await httpStream.CopyToAsync(fS, TimeSpan.FromSeconds(60));
                         }
                     }
 

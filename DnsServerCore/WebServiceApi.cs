@@ -94,9 +94,12 @@ namespace DnsServerCore
             {
                 Utf8JsonWriter jsonWriter = context.GetCurrentJsonWriter();
 
-                if (_updateCheckUri is null)
+                if (!_dnsWebService._dnsServer.EnableCheckForUpdate || (_updateCheckUri is null))
                 {
+                    jsonWriter.WriteBoolean("dnsServerEnableCheckForUpdate", false);
                     jsonWriter.WriteBoolean("updateAvailable", false);
+
+                    _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "Check for update was done {dnsServerEnableCheckForUpdate: False; updateAvailable: False;}");
                     return;
                 }
 
@@ -115,6 +118,7 @@ namespace DnsServerCore
 
                     bool updateAvailable = new Version(updateVersion) > _dnsWebService._currentVersion;
 
+                    jsonWriter.WriteBoolean("dnsServerEnableCheckForUpdate", true);
                     jsonWriter.WriteBoolean("updateAvailable", updateAvailable);
                     jsonWriter.WriteString("updateVersion", updateVersion);
                     jsonWriter.WriteString("currentVersion", _dnsWebService.GetServerVersion());
@@ -128,14 +132,13 @@ namespace DnsServerCore
                         jsonWriter.WriteString("changeLogLink", changeLogLink);
                     }
 
-                    string strLog = "Check for update was done {updateAvailable: " + updateAvailable + "; updateVersion: " + updateVersion + ";}";
-
-                    _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), strLog);
+                    _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "Check for update was done {dnsServerEnableCheckForUpdate: True; updateAvailable: " + updateAvailable + "; updateVersion: " + updateVersion + ";}");
                 }
                 catch (Exception ex)
                 {
-                    _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "Check for update was done {updateAvailable: False;}\r\n" + ex.ToString());
+                    _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "Check for update was done {dnsServerEnableCheckForUpdate: True; updateAvailable: False;}", ex);
 
+                    jsonWriter.WriteBoolean("dnsServerEnableCheckForUpdate", true);
                     jsonWriter.WriteBoolean("updateAvailable", false);
                 }
             }
@@ -442,6 +445,21 @@ namespace DnsServerCore
                     rawResponses[i].SerializeTo(jsonWriter);
 
                 jsonWriter.WriteEndArray();
+            }
+
+            public async Task HealthCheckAsync(HttpContext context)
+            {
+                User sessionUser = _dnsWebService.GetSessionUser(context);
+
+                if (!_dnsWebService._authManager.IsPermitted(PermissionSection.DnsClient, sessionUser, PermissionFlag.View))
+                    throw new DnsWebServiceException("Access was denied.");
+
+                HttpRequest request = context.Request;
+
+                string domain = request.GetQueryOrForm("domain", "localhost");
+                DnsResourceRecordType type = request.GetQueryOrFormEnum("type", DnsResourceRecordType.A);
+
+                _ = DnsClient.ParseResponseA(await _dnsWebService._dnsServer.DirectQueryAsync(new DnsQuestionRecord(domain, type, DnsClass.IN)));
             }
 
             #endregion

@@ -208,9 +208,6 @@ namespace DnsServerCore.Dns.ZoneManagers
             //flush existing zones
             Flush();
 
-            //load all internal zones
-            LoadAllInternalZones();
-
             //load zone files
             _zoneIndexLock.EnterWriteLock();
             try
@@ -234,7 +231,7 @@ namespace DnsServerCore.Dns.ZoneManagers
                     }
                     catch (Exception ex)
                     {
-                        _dnsServer.LogManager.Write("DNS Server failed to load zone file: " + zoneFile + "\r\n" + ex.ToString());
+                        _dnsServer.LogManager.Write("DNS Server failed to load zone file: " + zoneFile, ex);
                     }
                 }
 
@@ -244,41 +241,6 @@ namespace DnsServerCore.Dns.ZoneManagers
             finally
             {
                 _zoneIndexLock.ExitWriteLock();
-            }
-        }
-
-        private void LoadAllInternalZones()
-        {
-            {
-                CreateInternalPrimaryZone("localhost");
-                SetRecord("localhost", new DnsResourceRecord("localhost", DnsResourceRecordType.A, DnsClass.IN, 3600, new DnsARecordData(IPAddress.Loopback)));
-                SetRecord("localhost", new DnsResourceRecord("localhost", DnsResourceRecordType.AAAA, DnsClass.IN, 3600, new DnsAAAARecordData(IPAddress.IPv6Loopback)));
-            }
-
-            {
-                string ptrDomain = "0.in-addr.arpa";
-
-                CreateInternalPrimaryZone(ptrDomain);
-            }
-
-            {
-                string ptrDomain = "255.in-addr.arpa";
-
-                CreateInternalPrimaryZone(ptrDomain);
-            }
-
-            {
-                string ptrZoneName = "127.in-addr.arpa";
-
-                CreateInternalPrimaryZone(ptrZoneName);
-                SetRecord(ptrZoneName, new DnsResourceRecord("1.0.0.127.in-addr.arpa", DnsResourceRecordType.PTR, DnsClass.IN, 3600, new DnsPTRRecordData("localhost")));
-            }
-
-            {
-                string ptrZoneName = IPAddress.IPv6Loopback.GetReverseDomain();
-
-                CreateInternalPrimaryZone(ptrZoneName);
-                SetRecord(ptrZoneName, new DnsResourceRecord(ptrZoneName, DnsResourceRecordType.PTR, DnsClass.IN, 3600, new DnsPTRRecordData("localhost")));
             }
         }
 
@@ -621,9 +583,6 @@ namespace DnsServerCore.Dns.ZoneManagers
             bW.Write((byte)4); //version
 
             //write zone info
-            if (zoneInfo.Internal)
-                throw new InvalidOperationException("Cannot save zones marked as internal.");
-
             zoneInfo.WriteTo(bW);
 
             //write all zone records
@@ -697,9 +656,6 @@ namespace DnsServerCore.Dns.ZoneManagers
                                     break;
                                 }
                             }
-
-                            if (zone.Internal)
-                                continue; //dont save internal zones to disk
 
                             //save zone file
                             SaveZoneFile(zone.Name);
@@ -831,6 +787,12 @@ namespace DnsServerCore.Dns.ZoneManagers
                 return null;
 
             return new AuthZoneInfo(apexZone, loadHistory);
+        }
+
+        internal ApexZone FindApexZone(string domain)
+        {
+            _ = _root.FindZone(domain, out _, out _, out ApexZone apexZone, out _);
+            return apexZone;
         }
 
         internal AuthZone GetAuthZone(string zoneName, string domain)
@@ -975,24 +937,14 @@ namespace DnsServerCore.Dns.ZoneManagers
             }
         }
 
-        internal AuthZoneInfo CreateInternalPrimaryZone(string zoneName)
-        {
-            return CreatePrimaryZone(zoneName, true, _useSoaSerialDateScheme);
-        }
-
         public AuthZoneInfo CreatePrimaryZone(string zoneName)
         {
-            return CreatePrimaryZone(zoneName, false, _useSoaSerialDateScheme);
+            return CreatePrimaryZone(zoneName, _useSoaSerialDateScheme);
         }
 
         public AuthZoneInfo CreatePrimaryZone(string zoneName, bool useSoaSerialDateScheme)
         {
-            return CreatePrimaryZone(zoneName, false, useSoaSerialDateScheme);
-        }
-
-        private AuthZoneInfo CreatePrimaryZone(string zoneName, bool @internal, bool useSoaSerialDateScheme)
-        {
-            PrimaryZone apexZone = new PrimaryZone(_dnsServer, zoneName, @internal, useSoaSerialDateScheme);
+            PrimaryZone apexZone = new PrimaryZone(_dnsServer, zoneName, useSoaSerialDateScheme);
 
             _zoneIndexLock.EnterWriteLock();
             try
@@ -1003,8 +955,7 @@ namespace DnsServerCore.Dns.ZoneManagers
                     _zoneIndex.Add(zoneInfo);
                     _zoneIndex.Sort();
 
-                    if (!@internal)
-                        SaveZoneFile(zoneInfo.Name);
+                    SaveZoneFile(zoneInfo.Name);
 
                     return zoneInfo;
                 }
@@ -1784,7 +1735,7 @@ namespace DnsServerCore.Dns.ZoneManagers
             }
             catch (Exception ex)
             {
-                _dnsServer.LogManager.Write("DNS Server failed to convert the zone '" + currentZoneInfo.DisplayName + "' from " + currentZoneInfo.TypeName + " to " + AuthZoneInfo.GetZoneTypeName(newType) + " zone.\r\n" + ex.ToString());
+                _dnsServer.LogManager.Write("DNS Server failed to convert the zone '" + currentZoneInfo.DisplayName + "' from " + currentZoneInfo.TypeName + " to " + AuthZoneInfo.GetZoneTypeName(newType) + " zone.", ex);
 
                 //delete the zone if it was created
                 DeleteZone(currentZoneInfo);
@@ -1806,7 +1757,7 @@ namespace DnsServerCore.Dns.ZoneManagers
                 }
                 catch (Exception ex2)
                 {
-                    _dnsServer.LogManager.Write("DNS Server failed to load zone file: " + zoneFile + "\r\n" + ex2.ToString());
+                    _dnsServer.LogManager.Write("DNS Server failed to load zone file: " + zoneFile, ex2);
                 }
                 finally
                 {
@@ -1963,7 +1914,7 @@ namespace DnsServerCore.Dns.ZoneManagers
 
         public void SignPrimaryZone(string zoneName, DnssecPrivateKey kskPrivateKey, DnssecPrivateKey zskPrivateKey, uint dnsKeyTtl, bool useNSec3, ushort iterations = 0, byte saltLength = 0)
         {
-            if (!_root.TryGet(zoneName, out ApexZone apexZone) || (apexZone is not PrimaryZone primaryZone) || primaryZone.Internal)
+            if (!_root.TryGet(zoneName, out ApexZone apexZone) || (apexZone is not PrimaryZone primaryZone))
                 throw new DnsServerException("No such primary zone was found: " + zoneName);
 
             primaryZone.SignZone(kskPrivateKey, zskPrivateKey, dnsKeyTtl, useNSec3, iterations, saltLength);
@@ -1973,7 +1924,7 @@ namespace DnsServerCore.Dns.ZoneManagers
 
         public void UnsignPrimaryZone(string zoneName)
         {
-            if (!_root.TryGet(zoneName, out ApexZone apexZone) || (apexZone is not PrimaryZone primaryZone) || primaryZone.Internal)
+            if (!_root.TryGet(zoneName, out ApexZone apexZone) || (apexZone is not PrimaryZone primaryZone))
                 throw new DnsServerException("No such primary zone was found: " + zoneName);
 
             primaryZone.UnsignZone();
@@ -1983,7 +1934,7 @@ namespace DnsServerCore.Dns.ZoneManagers
 
         public void ConvertPrimaryZoneToNSEC(string zoneName)
         {
-            if (!_root.TryGet(zoneName, out ApexZone apexZone) || (apexZone is not PrimaryZone primaryZone) || primaryZone.Internal)
+            if (!_root.TryGet(zoneName, out ApexZone apexZone) || (apexZone is not PrimaryZone primaryZone))
                 throw new DnsServerException("No such primary zone was found: " + zoneName);
 
             primaryZone.ConvertToNSec();
@@ -1993,7 +1944,7 @@ namespace DnsServerCore.Dns.ZoneManagers
 
         public void ConvertPrimaryZoneToNSEC3(string zoneName, ushort iterations, byte saltLength)
         {
-            if (!_root.TryGet(zoneName, out ApexZone apexZone) || (apexZone is not PrimaryZone primaryZone) || primaryZone.Internal)
+            if (!_root.TryGet(zoneName, out ApexZone apexZone) || (apexZone is not PrimaryZone primaryZone))
                 throw new DnsServerException("No such primary zone was found: " + zoneName);
 
             primaryZone.ConvertToNSec3(iterations, saltLength);
@@ -2003,7 +1954,7 @@ namespace DnsServerCore.Dns.ZoneManagers
 
         public void UpdatePrimaryZoneNSEC3Parameters(string zoneName, ushort iterations, byte saltLength)
         {
-            if (!_root.TryGet(zoneName, out ApexZone apexZone) || (apexZone is not PrimaryZone primaryZone) || primaryZone.Internal)
+            if (!_root.TryGet(zoneName, out ApexZone apexZone) || (apexZone is not PrimaryZone primaryZone))
                 throw new DnsServerException("No such primary zone was found: " + zoneName);
 
             primaryZone.UpdateNSec3Parameters(iterations, saltLength);
@@ -2013,7 +1964,7 @@ namespace DnsServerCore.Dns.ZoneManagers
 
         public void UpdatePrimaryZoneDnsKeyTtl(string zoneName, uint dnsKeyTtl)
         {
-            if (!_root.TryGet(zoneName, out ApexZone apexZone) || (apexZone is not PrimaryZone primaryZone) || primaryZone.Internal)
+            if (!_root.TryGet(zoneName, out ApexZone apexZone) || (apexZone is not PrimaryZone primaryZone))
                 throw new DnsServerException("No such primary zone was found: " + zoneName);
 
             primaryZone.UpdateDnsKeyTtl(dnsKeyTtl);
@@ -2023,7 +1974,7 @@ namespace DnsServerCore.Dns.ZoneManagers
 
         public DnssecPrivateKey GenerateAndAddPrimaryZoneDnssecPrivateKey(string zoneName, DnssecPrivateKeyType keyType, DnssecAlgorithm algorithm, ushort rolloverDays, int keySize = -1)
         {
-            if (!_root.TryGet(zoneName, out ApexZone apexZone) || (apexZone is not PrimaryZone primaryZone) || primaryZone.Internal)
+            if (!_root.TryGet(zoneName, out ApexZone apexZone) || (apexZone is not PrimaryZone primaryZone))
                 throw new DnsServerException("No such primary zone was found: " + zoneName);
 
             DnssecPrivateKey privateKey = primaryZone.GenerateAndAddPrivateKey(keyType, algorithm, rolloverDays, keySize);
@@ -2035,7 +1986,7 @@ namespace DnsServerCore.Dns.ZoneManagers
 
         public void AddPrimaryZoneDnssecPrivateKey(string zoneName, DnssecPrivateKey privateKey)
         {
-            if (!_root.TryGet(zoneName, out ApexZone apexZone) || (apexZone is not PrimaryZone primaryZone) || primaryZone.Internal)
+            if (!_root.TryGet(zoneName, out ApexZone apexZone) || (apexZone is not PrimaryZone primaryZone))
                 throw new DnsServerException("No such primary zone was found: " + zoneName);
 
             primaryZone.AddPrivateKey(privateKey);
@@ -2045,7 +1996,7 @@ namespace DnsServerCore.Dns.ZoneManagers
 
         public DnssecPrivateKey UpdatePrimaryZoneDnssecPrivateKey(string zoneName, ushort keyTag, ushort rolloverDays)
         {
-            if (!_root.TryGet(zoneName, out ApexZone apexZone) || (apexZone is not PrimaryZone primaryZone) || primaryZone.Internal)
+            if (!_root.TryGet(zoneName, out ApexZone apexZone) || (apexZone is not PrimaryZone primaryZone))
                 throw new DnsServerException("No such primary zone was found: " + zoneName);
 
             DnssecPrivateKey privateKey = primaryZone.UpdatePrivateKey(keyTag, rolloverDays);
@@ -2057,7 +2008,7 @@ namespace DnsServerCore.Dns.ZoneManagers
 
         public void DeletePrimaryZoneDnssecPrivateKey(string zoneName, ushort keyTag)
         {
-            if (!_root.TryGet(zoneName, out ApexZone apexZone) || (apexZone is not PrimaryZone primaryZone) || primaryZone.Internal)
+            if (!_root.TryGet(zoneName, out ApexZone apexZone) || (apexZone is not PrimaryZone primaryZone))
                 throw new DnsServerException("No such primary zone was found: " + zoneName);
 
             primaryZone.DeletePrivateKey(keyTag);
@@ -2067,7 +2018,7 @@ namespace DnsServerCore.Dns.ZoneManagers
 
         public void PublishAllGeneratedPrimaryZoneDnssecPrivateKeys(string zoneName)
         {
-            if (!_root.TryGet(zoneName, out ApexZone apexZone) || (apexZone is not PrimaryZone primaryZone) || primaryZone.Internal)
+            if (!_root.TryGet(zoneName, out ApexZone apexZone) || (apexZone is not PrimaryZone primaryZone))
                 throw new DnsServerException("No such primary zone was found: " + zoneName);
 
             primaryZone.PublishAllGeneratedKeys();
@@ -2077,7 +2028,7 @@ namespace DnsServerCore.Dns.ZoneManagers
 
         public void ActivatePrimaryZoneKskDnsKey(string zoneName, ushort keyTag)
         {
-            if (!_root.TryGet(zoneName, out ApexZone apexZone) || (apexZone is not PrimaryZone primaryZone) || primaryZone.Internal)
+            if (!_root.TryGet(zoneName, out ApexZone apexZone) || (apexZone is not PrimaryZone primaryZone))
                 throw new DnsServerException("No such primary zone was found: " + zoneName);
 
             primaryZone.ActivateKskDnsKey(keyTag);
@@ -2087,7 +2038,7 @@ namespace DnsServerCore.Dns.ZoneManagers
 
         public void RolloverPrimaryZoneDnsKey(string zoneName, ushort keyTag)
         {
-            if (!_root.TryGet(zoneName, out ApexZone apexZone) || (apexZone is not PrimaryZone primaryZone) || primaryZone.Internal)
+            if (!_root.TryGet(zoneName, out ApexZone apexZone) || (apexZone is not PrimaryZone primaryZone))
                 throw new DnsServerException("No such primary zone was found: " + zoneName);
 
             primaryZone.RolloverDnsKey(keyTag);
@@ -2097,7 +2048,7 @@ namespace DnsServerCore.Dns.ZoneManagers
 
         public async Task RetirePrimaryZoneDnsKeyAsync(string zoneName, ushort keyTag)
         {
-            if (!_root.TryGet(zoneName, out ApexZone apexZone) || (apexZone is not PrimaryZone primaryZone) || primaryZone.Internal)
+            if (!_root.TryGet(zoneName, out ApexZone apexZone) || (apexZone is not PrimaryZone primaryZone))
                 throw new DnsServerException("No such primary zone was found: " + zoneName);
 
             await primaryZone.RetireDnsKeyAsync(keyTag);
@@ -3536,7 +3487,7 @@ namespace DnsServerCore.Dns.ZoneManagers
                     }
                 }
 
-                return new DnsDatagram(request.Identifier, true, DnsOpcode.StandardQuery, true, false, request.RecursionDesired, isRecursionAllowed, false, false, rCode, request.Question, answer, authority, additional, udpPayloadSize: _dnsServer.UdpPayloadSize, options: eDnsOptions);
+                return new DnsDatagram(request.Identifier, true, DnsOpcode.StandardQuery, true, false, request.RecursionDesired, isRecursionAllowed, false, false, rCode, request.Question, answer, authority, additional, _dnsServer.UdpPayloadSize, dnssecOk ? EDnsHeaderFlags.DNSSEC_OK : EDnsHeaderFlags.None, eDnsOptions);
             }
         }
 

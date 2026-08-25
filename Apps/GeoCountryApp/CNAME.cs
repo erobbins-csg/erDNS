@@ -34,8 +34,8 @@ namespace GeoCountry
     {
         #region variables
 
-        IDnsServer _dnsServer;
-        MaxMind _maxMind;
+        IDnsServer? _dnsServer;
+        MaxMind? _maxMind;
 
         #endregion
 
@@ -49,10 +49,7 @@ namespace GeoCountry
                 return;
 
             if (disposing)
-            {
-                if (_maxMind is not null)
-                    _maxMind.Dispose();
-            }
+                _maxMind?.Dispose();
 
             _disposed = true;
         }
@@ -66,7 +63,7 @@ namespace GeoCountry
 
         #region public
 
-        public Task InitializeAsync(IDnsServer dnsServer, string config)
+        public Task InitializeAsync(IDnsServer dnsServer, string? config)
         {
             _dnsServer = dnsServer;
             _maxMind = MaxMind.Create(dnsServer);
@@ -74,17 +71,20 @@ namespace GeoCountry
             return Task.CompletedTask;
         }
 
-        public Task<DnsDatagram> ProcessRequestAsync(DnsDatagram request, IPEndPoint remoteEP, DnsTransportProtocol protocol, bool isRecursionAllowed, string zoneName, string appRecordName, uint appRecordTtl, string appRecordData)
+        public Task<DnsDatagram?> ProcessRequestAsync(DnsDatagram request, IPEndPoint remoteEP, DnsTransportProtocol protocol, bool isRecursionAllowed, string zoneName, string appRecordName, uint appRecordTtl, string appRecordData)
         {
             DnsQuestionRecord question = request.Question[0];
 
             if (!question.Name.Equals(appRecordName, StringComparison.OrdinalIgnoreCase) && !appRecordName.StartsWith('*'))
-                return Task.FromResult<DnsDatagram>(null);
+                return Task.FromResult<DnsDatagram?>(null);
+
+            if (_maxMind is null)
+                throw new InvalidOperationException("MaxMind database not initialized.");
 
             using JsonDocument jsonDocument = JsonDocument.Parse(appRecordData, Address._jsonParseOptions);
             JsonElement jsonAppRecordData = jsonDocument.RootElement;
             JsonElement jsonCountry = default;
-            string countryCode = null;
+            string? countryCode = null;
 
             byte scopePrefixLength = 0;
             EDnsClientSubnetOptionData requestECS = request.GetEDnsClientSubnetOption();
@@ -92,12 +92,12 @@ namespace GeoCountry
             {
                 long? asn = null;
 
-                if ((_maxMind.IspReader is not null) && _maxMind.IspReader.TryIsp(requestECS.Address, out IspResponse csIsp) && (csIsp.Network is not null))
+                if ((_maxMind.IspReader is not null) && _maxMind.IspReader.TryIsp(requestECS.Address, out IspResponse? csIsp) && (csIsp.Network is not null))
                 {
                     scopePrefixLength = (byte)csIsp.Network.PrefixLength;
                     asn = csIsp.AutonomousSystemNumber;
                 }
-                else if ((_maxMind.AsnReader is not null) && _maxMind.AsnReader.TryAsn(requestECS.Address, out AsnResponse csAsn) && (csAsn.Network is not null))
+                else if ((_maxMind.AsnReader is not null) && _maxMind.AsnReader.TryAsn(requestECS.Address, out AsnResponse? csAsn) && (csAsn.Network is not null))
                 {
                     scopePrefixLength = (byte)csAsn.Network.PrefixLength;
                     asn = csAsn.AutonomousSystemNumber;
@@ -109,15 +109,18 @@ namespace GeoCountry
 
                 if ((asn is null) || !jsonAppRecordData.TryGetProperty("AS" + asn, out jsonCountry))
                 {
-                    if (_maxMind.CountryReader.TryCountry(requestECS.Address, out CountryResponse csResponse))
+                    if (_maxMind.CountryReader.TryCountry(requestECS.Address, out CountryResponse? csResponse) && (csResponse.Country.IsoCode is not null))
                     {
-                        string cc = csResponse.Country.IsoCode;
-
-                        if (!jsonAppRecordData.TryGetProperty(cc, out jsonCountry))
-                        {
+                        if (!jsonAppRecordData.TryGetProperty(csResponse.Country.IsoCode, out jsonCountry))
+                            if (!Address.TryMatchGroup(jsonAppRecordData, asn, csResponse.Country.IsoCode, out jsonCountry))
+                                if (jsonAppRecordData.TryGetProperty("default", out jsonCountry))
+                                    countryCode = csResponse.Country.IsoCode.ToLowerInvariant();
+                    }
+                    else if (asn is not null)
+                    {
+                        if (!Address.TryMatchGroup(jsonAppRecordData, asn, null, out jsonCountry))
                             if (jsonAppRecordData.TryGetProperty("default", out jsonCountry))
-                                countryCode = cc is null ? "default" : cc.ToLowerInvariant();
-                        }
+                                countryCode = "default";
                     }
                 }
             }
@@ -126,38 +129,47 @@ namespace GeoCountry
             {
                 long? asn = null;
 
-                if ((_maxMind.IspReader is not null) && _maxMind.IspReader.TryIsp(remoteEP.Address, out IspResponse csIsp) && (csIsp.Network is not null))
+                if ((_maxMind.IspReader is not null) && _maxMind.IspReader.TryIsp(remoteEP.Address, out IspResponse? csIsp) && (csIsp.Network is not null))
                     asn = csIsp.AutonomousSystemNumber;
-                else if ((_maxMind.AsnReader is not null) && _maxMind.AsnReader.TryAsn(remoteEP.Address, out AsnResponse csAsn) && (csAsn.Network is not null))
+                else if ((_maxMind.AsnReader is not null) && _maxMind.AsnReader.TryAsn(remoteEP.Address, out AsnResponse? csAsn) && (csAsn.Network is not null))
                     asn = csAsn.AutonomousSystemNumber;
 
                 if ((asn is null) || !jsonAppRecordData.TryGetProperty("AS" + asn, out jsonCountry))
                 {
-                    if (_maxMind.CountryReader.TryCountry(remoteEP.Address, out CountryResponse response))
+                    if (_maxMind.CountryReader.TryCountry(remoteEP.Address, out CountryResponse? response) && (response.Country.IsoCode is not null))
                     {
-                        string cc = response.Country.IsoCode;
+                        if (!jsonAppRecordData.TryGetProperty(response.Country.IsoCode, out jsonCountry))
+                            if (!Address.TryMatchGroup(jsonAppRecordData, asn, response.Country.IsoCode, out jsonCountry))
+                            {
+                                if (!jsonAppRecordData.TryGetProperty("default", out jsonCountry))
+                                    return Task.FromResult<DnsDatagram?>(null);
 
-                        if (!jsonAppRecordData.TryGetProperty(cc, out jsonCountry))
+                                countryCode = response.Country.IsoCode.ToLowerInvariant();
+                            }
+                    }
+                    else if (asn is not null)
+                    {
+                        if (!Address.TryMatchGroup(jsonAppRecordData, asn, null, out jsonCountry))
                         {
                             if (!jsonAppRecordData.TryGetProperty("default", out jsonCountry))
-                                return Task.FromResult<DnsDatagram>(null);
+                                return Task.FromResult<DnsDatagram?>(null);
 
-                            countryCode = cc is null ? "default" : cc.ToLowerInvariant();
+                            countryCode = "default";
                         }
                     }
                     else
                     {
                         if (!jsonAppRecordData.TryGetProperty("default", out jsonCountry))
-                            return Task.FromResult<DnsDatagram>(null);
+                            return Task.FromResult<DnsDatagram?>(null);
 
                         countryCode = "default";
                     }
                 }
             }
 
-            string cname = jsonCountry.GetString();
+            string? cname = jsonCountry.GetString();
             if (string.IsNullOrEmpty(cname))
-                return Task.FromResult<DnsDatagram>(null);
+                return Task.FromResult<DnsDatagram?>(null);
 
             if (countryCode is not null)
                 cname = cname.Replace("{CountryCode}", countryCode, StringComparison.OrdinalIgnoreCase);
@@ -169,12 +181,12 @@ namespace GeoCountry
             else
                 answers = [new DnsResourceRecord(question.Name, DnsResourceRecordType.CNAME, DnsClass.IN, appRecordTtl, new DnsCNAMERecordData(cname))];
 
-            EDnsOption[] options = null;
+            EDnsOption[]? options = null;
 
             if (requestECS is not null)
                 options = EDnsClientSubnetOptionData.GetEDnsClientSubnetOption(requestECS.SourcePrefixLength, scopePrefixLength, requestECS.Address);
 
-            return Task.FromResult(new DnsDatagram(request.Identifier, true, request.OPCODE, true, false, request.RecursionDesired, isRecursionAllowed, false, false, DnsResponseCode.NoError, request.Question, answers, null, null, _dnsServer.UdpPayloadSize, EDnsHeaderFlags.None, options));
+            return Task.FromResult<DnsDatagram?>(new DnsDatagram(request.Identifier, true, request.OPCODE, true, false, request.RecursionDesired, isRecursionAllowed, false, false, DnsResponseCode.NoError, request.Question, answers, null, null, _dnsServer!.UdpPayloadSize, EDnsHeaderFlags.None, options));
         }
 
         #endregion
@@ -191,6 +203,7 @@ namespace GeoCountry
                 return @"{
   ""IN"": ""in.example.com"",
   ""AS1234"": ""xyz.example.com"",
+  ""custom-group"": ""abc.example.com"",
   ""default"": ""{CountryCode}.example.com""
 }";
             }

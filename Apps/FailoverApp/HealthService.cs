@@ -34,7 +34,7 @@ namespace Failover
     {
         #region variables
 
-        static HealthService _healthService;
+        static HealthService? _healthService;
 
         readonly IDnsServer _dnsServer;
 
@@ -56,7 +56,7 @@ namespace Failover
         {
             _dnsServer = dnsServer;
 
-            _maintenanceTimer = new Timer(delegate (object state)
+            _maintenanceTimer = new Timer(delegate (object? state)
             {
                 try
                 {
@@ -64,7 +64,7 @@ namespace Failover
                     {
                         if (healthMonitor.Value.IsExpired())
                         {
-                            if (_healthMonitors.TryRemove(healthMonitor.Key, out HealthMonitor removedMonitor))
+                            if (_healthMonitors.TryRemove(healthMonitor.Key, out HealthMonitor? removedMonitor))
                                 removedMonitor.Dispose();
                         }
                     }
@@ -148,7 +148,7 @@ namespace Failover
 
         #region private
 
-        private static string GetHealthMonitorKey(IPAddress address, string healthCheck, Uri healthCheckUrl)
+        private static string GetHealthMonitorKey(IPAddress address, string healthCheck, Uri? healthCheckUrl)
         {
             //key: health-check|127.0.0.1
             //key: health-check|127.0.0.1|http://example.com/
@@ -159,7 +159,7 @@ namespace Failover
                 return healthCheck + "|" + address.ToString() + "|" + healthCheckUrl.AbsoluteUri;
         }
 
-        private static string GetHealthMonitorKey(string domain, DnsResourceRecordType type, string healthCheck, Uri healthCheckUrl)
+        private static string GetHealthMonitorKey(string domain, DnsResourceRecordType type, string healthCheck, Uri? healthCheckUrl)
         {
             //key: health-check|example.com|A
             //key: health-check|example.com|AAAA|http://example.com/
@@ -176,7 +176,7 @@ namespace Failover
             {
                 if (healthMonitor.Key.StartsWith(healthCheck + "|"))
                 {
-                    if (_healthMonitors.TryRemove(healthMonitor.Key, out HealthMonitor removedMonitor))
+                    if (_healthMonitors.TryRemove(healthMonitor.Key, out HealthMonitor? removedMonitor))
                         removedMonitor.Dispose();
                 }
             }
@@ -200,7 +200,7 @@ namespace Failover
                 {
                     string name = jsonEmailAlert.GetPropertyValue("name", "default");
 
-                    if (_emailAlerts.TryGetValue(name, out EmailAlert existingEmailAlert))
+                    if (_emailAlerts.TryGetValue(name, out EmailAlert? existingEmailAlert))
                     {
                         //update
                         existingEmailAlert.Reload(jsonEmailAlert);
@@ -230,7 +230,7 @@ namespace Failover
 
                     if (!emailAlertExists)
                     {
-                        if (_emailAlerts.TryRemove(emailAlert.Key, out EmailAlert removedEmailAlert))
+                        if (_emailAlerts.TryRemove(emailAlert.Key, out EmailAlert? removedEmailAlert))
                             removedEmailAlert.Dispose();
                     }
                 }
@@ -245,7 +245,7 @@ namespace Failover
                 {
                     string name = jsonWebHook.GetPropertyValue("name", "default");
 
-                    if (_webHooks.TryGetValue(name, out WebHook existingWebHook))
+                    if (_webHooks.TryGetValue(name, out WebHook? existingWebHook))
                     {
                         //update
                         existingWebHook.Reload(jsonWebHook);
@@ -275,7 +275,7 @@ namespace Failover
 
                     if (!webHookExists)
                     {
-                        if (_webHooks.TryRemove(webHook.Key, out WebHook removedWebHook))
+                        if (_webHooks.TryRemove(webHook.Key, out WebHook? removedWebHook))
                             removedWebHook.Dispose();
                     }
                 }
@@ -290,7 +290,7 @@ namespace Failover
                 {
                     string name = jsonHealthCheck.GetPropertyValue("name", "default");
 
-                    if (_healthChecks.TryGetValue(name, out HealthCheck existingHealthCheck))
+                    if (_healthChecks.TryGetValue(name, out HealthCheck? existingHealthCheck))
                     {
                         //update
                         existingHealthCheck.Reload(jsonHealthCheck);
@@ -320,7 +320,7 @@ namespace Failover
 
                     if (!healthCheckExists)
                     {
-                        if (_healthChecks.TryRemove(healthCheck.Key, out HealthCheck removedHealthCheck))
+                        if (_healthChecks.TryRemove(healthCheck.Key, out HealthCheck? removedHealthCheck))
                         {
                             //remove health monitors using this health check
                             RemoveHealthMonitor(healthCheck.Key);
@@ -338,7 +338,7 @@ namespace Failover
             {
                 foreach (JsonElement jsonNetwork in jsonUnderMaintenance.EnumerateArray())
                 {
-                    string network = jsonNetwork.GetProperty("network").GetString();
+                    string network = jsonNetwork.GetProperty("network").ToString();
                     bool enabled;
 
                     if (jsonNetwork.TryGetProperty("enabled", out JsonElement jsonEnabled))
@@ -370,14 +370,14 @@ namespace Failover
             }
         }
 
-        public HealthCheckResponse QueryStatus(IPAddress address, string healthCheck, Uri healthCheckUrl, bool tryAdd)
+        public HealthCheckResponse QueryStatus(IPAddress address, string healthCheck, Uri? healthCheckUrl, bool tryAdd)
         {
             string healthMonitorKey = GetHealthMonitorKey(address, healthCheck, healthCheckUrl);
 
-            if (_healthMonitors.TryGetValue(healthMonitorKey, out HealthMonitor monitor))
+            if (_healthMonitors.TryGetValue(healthMonitorKey, out HealthMonitor? monitor))
                 return monitor.LastHealthCheckResponse;
 
-            if (_healthChecks.TryGetValue(healthCheck, out HealthCheck existingHealthCheck))
+            if (_healthChecks.TryGetValue(healthCheck, out HealthCheck? existingHealthCheck))
             {
                 if (tryAdd)
                 {
@@ -395,16 +395,16 @@ namespace Failover
             }
         }
 
-        public HealthCheckResponse QueryStatus(string domain, DnsResourceRecordType type, string healthCheck, Uri healthCheckUrl, bool tryAdd)
+        public HealthCheckResponse QueryStatus(string domain, DnsResourceRecordType type, string healthCheck, Uri? healthCheckUrl, bool tryAdd)
         {
             domain = domain.ToLowerInvariant();
 
             string healthMonitorKey = GetHealthMonitorKey(domain, type, healthCheck, healthCheckUrl);
 
-            if (_healthMonitors.TryGetValue(healthMonitorKey, out HealthMonitor monitor))
+            if (_healthMonitors.TryGetValue(healthMonitorKey, out HealthMonitor? monitor))
                 return monitor.LastHealthCheckResponse;
 
-            if (_healthChecks.TryGetValue(healthCheck, out HealthCheck existingHealthCheck))
+            if (_healthChecks.TryGetValue(healthCheck, out HealthCheck? existingHealthCheck))
             {
                 if (tryAdd)
                 {

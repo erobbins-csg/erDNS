@@ -140,7 +140,7 @@ namespace DnsServerCore.Dns.ZoneManagers
             }
             catch (Exception ex)
             {
-                _dnsServer.LogManager.Write("DNS Server encountered an error while loading allowed zone file: " + allowedZoneFile + "\r\n" + ex.ToString());
+                _dnsServer.LogManager.Write("DNS Server encountered an error while loading allowed zone file: " + allowedZoneFile, ex);
             }
         }
 

@@ -1,6 +1,6 @@
 ﻿/*
 Technitium DNS Server
-Copyright (C) 2024  Shreyas Zare (shreyas@technitium.com)
+Copyright (C) 2026  Shreyas Zare (shreyas@technitium.com)
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -416,7 +416,7 @@ namespace DnsServerCore.Dhcp
             if (_clientFullyQualifiedDomainName != null)
                 return _clientFullyQualifiedDomainName.DomainName + " [" + hardwareAddress + "]";
 
-            if (_hostName != null)
+            if ((_hostName is not null) && !string.IsNullOrWhiteSpace(_hostName.HostName))
                 return _hostName.HostName + " [" + hardwareAddress + "]";
 
             return "[" + hardwareAddress + "]";

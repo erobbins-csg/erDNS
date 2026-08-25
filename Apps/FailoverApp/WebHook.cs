@@ -40,10 +40,10 @@ namespace Failover
 
         readonly string _name;
         bool _enabled;
-        Uri[] _urls;
+        Uri[]? _urls;
 
-        HttpClientNetworkHandler _httpHandler;
-        HttpClient _httpClient;
+        HttpClientNetworkHandler? _httpHandler;
+        HttpClient? _httpClient;
 
         #endregion
 
@@ -100,7 +100,7 @@ namespace Failover
         private void ConditionalHttpReload()
         {
             bool handlerChanged = false;
-            NetProxy proxy = _service.DnsServer.Proxy;
+            NetProxy? proxy = _service.DnsServer.Proxy;
 
             if (_httpHandler is null)
             {
@@ -163,21 +163,24 @@ namespace Failover
             {
                 try
                 {
-                    HttpResponseMessage response = await _httpClient.PostAsync(url, content);
+                    HttpResponseMessage response = await _httpClient!.PostAsync(url, content);
                     response.EnsureSuccessStatusCode();
                 }
                 catch (Exception ex)
                 {
-                    _service.DnsServer.WriteLog("Webhook call failed for URL: " + url.AbsoluteUri + "\r\n" + ex.ToString());
+                    _service.DnsServer.WriteLog("Webhook call failed for URL: " + url.AbsoluteUri, ex);
                 }
             }
 
-            List<Task> tasks = new List<Task>();
+            if (_urls is not null)
+            {
+                List<Task> tasks = new List<Task>();
 
-            foreach (Uri url in _urls)
-                tasks.Add(CallWebHook(url));
+                foreach (Uri url in _urls)
+                    tasks.Add(CallWebHook(url));
 
-            await Task.WhenAll(tasks);
+                await Task.WhenAll(tasks);
+            }
         }
 
         #endregion
@@ -188,7 +191,7 @@ namespace Failover
         {
             _enabled = jsonWebHook.GetPropertyValue("enabled", false);
 
-            if (jsonWebHook.TryReadArray("urls", delegate (string uri) { return new Uri(uri); }, out Uri[] urls))
+            if (jsonWebHook.TryReadArray("urls", delegate (string uri) { return new Uri(uri); }, out Uri[]? urls))
                 _urls = urls;
             else
                 _urls = null;
@@ -330,7 +333,7 @@ namespace Failover
         public bool Enabled
         { get { return _enabled; } }
 
-        public Uri[] Urls
+        public Uri[]? Urls
         { get { return _urls; } }
 
         #endregion

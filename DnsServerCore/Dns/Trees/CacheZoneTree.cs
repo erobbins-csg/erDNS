@@ -1,6 +1,6 @@
 ﻿/*
 Technitium DNS Server
-Copyright (C) 2022  Shreyas Zare (shreyas@technitium.com)
+Copyright (C) 2026  Shreyas Zare (shreyas@technitium.com)
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -100,7 +100,10 @@ namespace DnsServerCore.Dns.Trees
             else
             {
                 //zone found
-                closest = null; //not required
+                if (zoneValue == closestSubDomain)
+                    closest = null; //not required since DNAME can exist with other records
+                else
+                    closest = closestSubDomain; //required for DNAME
 
                 if (zoneValue.ContainsNameServerRecords())
                     delegation = zoneValue;

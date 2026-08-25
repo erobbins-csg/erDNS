@@ -42,9 +42,6 @@ namespace DnsServerCore.Dns
 
         const int DAILY_STATS_FILE_TOP_LIMIT = 1000;
 
-        readonly static HourlyStats _emptyHourlyStats = new HourlyStats();
-        readonly static StatCounter _emptyDailyStats = new StatCounter();
-
         readonly DnsServer _dnsServer;
         readonly string _statsFolder;
 
@@ -87,11 +84,6 @@ namespace DnsServerCore.Dns
         #endregion
 
         #region constructor
-
-        static StatsManager()
-        {
-            _emptyDailyStats.Lock();
-        }
 
         public StatsManager(DnsServer dnsServer)
         {
@@ -356,7 +348,6 @@ namespace DnsServerCore.Dns
             }
         }
 
-
         private void LoadLastHourStats()
         {
             try
@@ -483,11 +474,11 @@ namespace DnsServerCore.Dns
         private HourlyStats LoadHourlyStats(DateTime dateTime, bool forceReload = false, bool ifNotExistsReturnEmptyHourlyStats = false)
         {
             if (_enableInMemoryStats)
-                return _emptyHourlyStats;
+                return HourlyStats.Empty;
 
             DateTime hourlyDateTime = new DateTime(dateTime.Year, dateTime.Month, dateTime.Day, dateTime.Hour, 0, 0, 0, DateTimeKind.Utc);
 
-            if (forceReload || !_hourlyStatsCache.TryGetValue(hourlyDateTime, out HourlyStats hourlyStats))
+            if (forceReload || !_hourlyStatsCache.TryGetValue(hourlyDateTime, out HourlyStats hourlyStats) || ReferenceEquals(hourlyStats, HourlyStats.Empty))
             {
                 string hourlyStatsFile = Path.Combine(_statsFolder, dateTime.ToString("yyyyMMddHH", CultureInfo.InvariantCulture) + ".stat");
 
@@ -505,7 +496,7 @@ namespace DnsServerCore.Dns
                         _dnsServer.LogManager.Write(ex);
 
                         if (ifNotExistsReturnEmptyHourlyStats)
-                            hourlyStats = _emptyHourlyStats;
+                            hourlyStats = HourlyStats.Empty;
                         else
                             hourlyStats = new HourlyStats();
                     }
@@ -513,7 +504,7 @@ namespace DnsServerCore.Dns
                 else
                 {
                     if (ifNotExistsReturnEmptyHourlyStats)
-                        hourlyStats = _emptyHourlyStats;
+                        hourlyStats = HourlyStats.Empty;
                     else
                         hourlyStats = new HourlyStats();
                 }
@@ -527,7 +518,7 @@ namespace DnsServerCore.Dns
         private StatCounter LoadDailyStats(DateTime dateTime)
         {
             if (_enableInMemoryStats)
-                return _emptyDailyStats;
+                return StatCounter.Empty;
 
             DateTime dailyDateTime = new DateTime(dateTime.Year, dateTime.Month, dateTime.Day, 0, 0, 0, 0, DateTimeKind.Utc);
 
@@ -1727,6 +1718,8 @@ namespace DnsServerCore.Dns
         {
             #region variables
 
+            public readonly static HourlyStats Empty = new HourlyStats();
+
             readonly StatCounter _hourStat; //calculated value
             StatCounter[] _minuteStats = new StatCounter[60];
 
@@ -1777,6 +1770,9 @@ namespace DnsServerCore.Dns
 
             public void UpdateStat(DateTime dateTime, StatCounter minuteStat)
             {
+                if (ReferenceEquals(this, Empty))
+                    return;
+
                 if (!minuteStat.IsLocked)
                     throw new DnsServerException("StatCounter must be locked.");
 
@@ -1786,6 +1782,9 @@ namespace DnsServerCore.Dns
 
             public void UnloadMinuteStats()
             {
+                if (ReferenceEquals(this, Empty))
+                    return;
+
                 _minuteStats = null;
             }
 
@@ -1822,6 +1821,8 @@ namespace DnsServerCore.Dns
         class StatCounter
         {
             #region variables
+
+            public readonly static StatCounter Empty = new StatCounter() { _locked = true };
 
             volatile bool _locked;
 

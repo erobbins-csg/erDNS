@@ -48,7 +48,6 @@ using System.IO;
 using System.IO.Compression;
 using System.Net;
 using System.Net.Http;
-using System.Net.Quic;
 using System.Net.Security;
 using System.Net.Sockets;
 using System.Reflection;
@@ -73,6 +72,7 @@ namespace DnsServerCore
         #region variables
 
         readonly static char[] commaSeparator = new char[] { ',' };
+        static readonly IPEndPoint IPENDPOINT_ANY_0 = new IPEndPoint(IPAddress.Any, 0);
 
         readonly Version _currentVersion;
         readonly DateTime _uptimestamp = DateTime.UtcNow;
@@ -102,9 +102,17 @@ namespace DnsServerCore
         DhcpServer _dhcpServer;
 
         //web service
-        IReadOnlyList<IPAddress> _webServiceLocalAddresses = [IPAddress.Any, IPAddress.IPv6Any];
         int _webServiceHttpPort = 5380;
         int _webServiceTlsPort = 53443;
+
+        IReadOnlyList<IPAddress> _webServiceLocalAddresses = [IPAddress.Any, IPAddress.IPv6Any];
+
+        bool _webServiceEnableHttpUnixSocket;
+        string _webServiceHttpUnixSocket;
+
+        bool _webServiceEnableTlsUnixSocket;
+        string _webServiceTlsUnixSocket;
+
         bool _webServiceEnableTls;
         bool _webServiceEnableHttp3;
         bool _webServiceHttpToTlsRedirect;
@@ -125,6 +133,7 @@ namespace DnsServerCore
         string _webServiceTlsCertificatePath;
         string _webServiceTlsCertificatePassword;
         string _webServiceRealIpHeader = "X-Real-IP";
+        string _webServiceCspFrameAncestorsHeader = "'none'";
 
         Timer _tlsCertificateUpdateTimer;
         const int TLS_CERTIFICATE_UPDATE_TIMER_INITIAL_INTERVAL = 60000;
@@ -310,7 +319,7 @@ namespace DnsServerCore
                         }
                         catch (Exception ex)
                         {
-                            _log.Write("DNS Server encountered an error while loading Web Service TLS certificate: " + webServiceTlsCertificateAbsolutePath + "\r\n" + ex.ToString());
+                            _log.Write("DNS Server encountered an error while loading Web Service TLS certificate: " + webServiceTlsCertificateAbsolutePath, ex);
                         }
 
                         StartTlsCertificateUpdateTimer();
@@ -335,13 +344,20 @@ namespace DnsServerCore
                     string webServiceHttpToTlsRedirect = Environment.GetEnvironmentVariable("DNS_SERVER_WEB_SERVICE_HTTP_TO_TLS_REDIRECT");
                     if (!string.IsNullOrEmpty(webServiceHttpToTlsRedirect))
                         _webServiceHttpToTlsRedirect = bool.Parse(webServiceHttpToTlsRedirect);
+
+                    string webServiceReverseProxyAddresses = Environment.GetEnvironmentVariable("DNS_SERVER_WEB_SERVICE_REVERSE_PROXY_ADDRESSES");
+                    if (!string.IsNullOrEmpty(webServiceReverseProxyAddresses))
+                        _webServiceReverseProxyAddresses = webServiceReverseProxyAddresses.Split(NetworkAccessControl.Parse, ',');
                 }
 
-                SaveConfigFileInternal();
+                lock (_saveLock)
+                {
+                    SaveConfigFileInternal();
+                }
             }
             catch (Exception ex)
             {
-                _log.Write("DNS Server encountered an error while loading Web Service config file: " + webServiceConfigFile + "\r\n" + ex.ToString());
+                _log.Write("DNS Server encountered an error while loading Web Service config file: " + webServiceConfigFile, ex);
                 _log.Write("Note: You may try deleting the Web Service config file to fix this issue. However, you will lose Web Service settings but, other data wont be affected.");
                 throw;
             }
@@ -445,16 +461,8 @@ namespace DnsServerCore
 
             foreach (AuthZoneInfo zone in zones)
             {
-                if (zone.Internal)
-                {
-                    _authManager.SetPermission(PermissionSection.Zones, zone.Name, admins, PermissionFlag.View);
-                    _authManager.SetPermission(PermissionSection.Zones, zone.Name, dnsAdmins, PermissionFlag.View);
-                }
-                else
-                {
-                    _authManager.SetPermission(PermissionSection.Zones, zone.Name, admins, PermissionFlag.ViewModifyDelete);
-                    _authManager.SetPermission(PermissionSection.Zones, zone.Name, dnsAdmins, PermissionFlag.ViewModifyDelete);
-                }
+                _authManager.SetPermission(PermissionSection.Zones, zone.Name, admins, PermissionFlag.ViewModifyDelete);
+                _authManager.SetPermission(PermissionSection.Zones, zone.Name, dnsAdmins, PermissionFlag.ViewModifyDelete);
             }
 
             _authManager.SaveConfigFile();
@@ -468,7 +476,7 @@ namespace DnsServerCore
             BinaryReader bR = new BinaryReader(s);
 
             int version = bR.ReadByte();
-            if (version > 2)
+            if (version > 4)
                 throw new InvalidDataException("Web Service config version not supported.");
 
             _webServiceHttpPort = bR.ReadInt32();
@@ -493,6 +501,34 @@ namespace DnsServerCore
                 }
 
                 _webServiceLocalAddresses = webServiceLocalAddresses;
+            }
+
+            if (version >= 3)
+            {
+                _webServiceEnableHttpUnixSocket = bR.ReadBoolean();
+
+                _webServiceHttpUnixSocket = s.ReadShortString();
+                if (_webServiceHttpUnixSocket.Length == 0)
+                    _webServiceHttpUnixSocket = null;
+            }
+            else
+            {
+                _webServiceEnableHttpUnixSocket = false;
+                _webServiceHttpUnixSocket = null;
+            }
+
+            if (version >= 4)
+            {
+                _webServiceEnableTlsUnixSocket = bR.ReadBoolean();
+
+                _webServiceTlsUnixSocket = s.ReadShortString();
+                if (_webServiceTlsUnixSocket.Length == 0)
+                    _webServiceTlsUnixSocket = null;
+            }
+            else
+            {
+                _webServiceEnableTlsUnixSocket = false;
+                _webServiceTlsUnixSocket = null;
             }
 
             _webServiceEnableTls = bR.ReadBoolean();
@@ -539,7 +575,7 @@ namespace DnsServerCore
                 }
                 catch (Exception ex)
                 {
-                    _log.Write("DNS Server encountered an error while loading Web Service TLS certificate: " + webServiceTlsCertificateAbsolutePath + "\r\n" + ex.ToString());
+                    _log.Write("DNS Server encountered an error while loading Web Service TLS certificate: " + webServiceTlsCertificateAbsolutePath, ex);
                 }
 
                 StartTlsCertificateUpdateTimer();
@@ -548,6 +584,11 @@ namespace DnsServerCore
             CheckAndLoadSelfSignedCertificate(false, false);
 
             _webServiceRealIpHeader = s.ReadShortString();
+
+            if (version >= 3)
+                _webServiceCspFrameAncestorsHeader = s.ReadShortString();
+            else
+                _webServiceCspFrameAncestorsHeader = "'none'";
         }
 
         private void WriteConfigTo(Stream s)
@@ -555,7 +596,7 @@ namespace DnsServerCore
             BinaryWriter bW = new BinaryWriter(s);
 
             bW.Write(Encoding.ASCII.GetBytes("WC")); //format
-            bW.Write((byte)2); //version
+            bW.Write((byte)4); //version
 
             bW.Write(_webServiceHttpPort);
             bW.Write(_webServiceTlsPort);
@@ -566,6 +607,12 @@ namespace DnsServerCore
                 foreach (IPAddress localAddress in _webServiceLocalAddresses)
                     localAddress.WriteTo(bW);
             }
+
+            bW.Write(_webServiceEnableHttpUnixSocket);
+            s.WriteShortString(_webServiceHttpUnixSocket ?? "");
+
+            bW.Write(_webServiceEnableTlsUnixSocket);
+            s.WriteShortString(_webServiceTlsUnixSocket ?? "");
 
             bW.Write(_webServiceEnableTls);
             bW.Write(_webServiceEnableHttp3);
@@ -585,6 +632,7 @@ namespace DnsServerCore
                 s.WriteShortString(_webServiceTlsCertificatePassword);
 
             s.WriteShortString(_webServiceRealIpHeader);
+            s.WriteShortString(_webServiceCspFrameAncestorsHeader);
         }
 
         #endregion
@@ -593,7 +641,7 @@ namespace DnsServerCore
 
         internal async Task BackupConfigAsync(Stream zipStream, bool authConfig, bool clusterConfig, bool webServiceSettings, bool dnsSettings, bool logSettings, bool zones, bool allowedZones, bool blockedZones, bool blockLists, bool apps, bool scopes, bool stats, bool logs, bool isConfigTransfer = false, DateTime ifModifiedSince = default, ICollection<string> includeZones = null)
         {
-            using (ZipArchive backupZip = new ZipArchive(zipStream, ZipArchiveMode.Create, true, Encoding.UTF8))
+            await using (ZipArchive backupZip = new ZipArchive(zipStream, ZipArchiveMode.Create, true, Encoding.UTF8))
             {
                 if (authConfig)
                 {
@@ -862,7 +910,7 @@ namespace DnsServerCore
 
         internal async Task RestoreConfigAsync(Stream zipStream, bool authConfig, bool clusterConfig, bool webServiceSettings, bool dnsSettings, bool logSettings, bool zones, bool allowedZones, bool blockedZones, bool blockLists, bool apps, bool scopes, bool stats, bool logs, bool deleteExistingFiles, UserSession implantSession = null, bool isConfigTransfer = false)
         {
-            using (ZipArchive backupZip = new ZipArchive(zipStream, ZipArchiveMode.Read, false, Encoding.UTF8))
+            await using (ZipArchive backupZip = new ZipArchive(zipStream, ZipArchiveMode.Read, false, Encoding.UTF8))
             {
                 bool restartWebService = false;
 
@@ -883,7 +931,7 @@ namespace DnsServerCore
 
                     if (logs && !isConfigTransfer)
                     {
-                        _log.BulkManipulateLogFiles(delegate ()
+                        _log.BulkManipulateLogFiles(async delegate ()
                         {
                             if (deleteExistingFiles)
                             {
@@ -910,7 +958,7 @@ namespace DnsServerCore
                                 {
                                     try
                                     {
-                                        entry.ExtractToFile(Path.Combine(_log.LogFolderAbsolutePath, entry.Name), true);
+                                        await entry.ExtractToFileAsync(Path.Combine(_log.LogFolderAbsolutePath, entry.Name), true);
                                     }
                                     catch (Exception ex)
                                     {
@@ -957,13 +1005,15 @@ namespace DnsServerCore
 
                             if (certEntry.FullName.EndsWith(".pfx", StringComparison.OrdinalIgnoreCase) || certEntry.FullName.EndsWith(".p12", StringComparison.OrdinalIgnoreCase))
                             {
-                                string certFile = Path.Combine(_configFolder, certEntry.FullName);
-
                                 try
                                 {
+                                    string certFile = Path.GetFullPath(Path.Combine(_configFolder, certEntry.FullName));
+                                    if (!certFile.StartsWith(_configFolder.TrimEnd(['/', '\\']) + Path.DirectorySeparatorChar))
+                                        throw new IOException("Extracting Zip entry would have resulted in a file outside the specified destination directory.");
+
                                     Directory.CreateDirectory(Path.GetDirectoryName(certFile));
 
-                                    certEntry.ExtractToFile(certFile, true);
+                                    await certEntry.ExtractToFileAsync(certFile, true);
                                 }
                                 catch (Exception ex)
                                 {
@@ -972,6 +1022,8 @@ namespace DnsServerCore
                             }
                         }
                     }
+
+                    bool updateCertInClusterPrimaryZone = false;
 
                     if (webServiceSettings && !isConfigTransfer)
                     {
@@ -984,18 +1036,8 @@ namespace DnsServerCore
                                 LoadConfig(stream);
                             }
 
-                            //cert may have changed so update cluster certs when restoring
-                            if (_clusterManager.ClusterInitialized)
-                            {
-                                try
-                                {
-                                    _clusterManager.UpdateSelfNodeUrlAndCertificate();
-                                }
-                                catch (Exception ex)
-                                {
-                                    _log.Write(ex);
-                                }
-                            }
+                            //cert may have changed so update cert in cluster primary zone when restoring
+                            updateCertInClusterPrimaryZone = true;
                         }
                     }
 
@@ -1025,8 +1067,11 @@ namespace DnsServerCore
 
                                     _log.Write("Old DNS config file was restored successfully.");
 
-                                    //explicitly save webservice.config
-                                    SaveConfigFileInternal();
+                                    lock (_saveLock)
+                                    {
+                                        //explicitly save webservice.config
+                                        SaveConfigFileInternal();
+                                    }
                                 }
                             }
                         }
@@ -1113,7 +1158,7 @@ namespace DnsServerCore
                                 {
                                     try
                                     {
-                                        entry.ExtractToFile(Path.Combine(_configFolder, "zones", entry.Name), true);
+                                        await entry.ExtractToFileAsync(Path.Combine(_configFolder, "zones", entry.Name), true);
                                     }
                                     catch (Exception ex)
                                     {
@@ -1125,6 +1170,22 @@ namespace DnsServerCore
                             //reload zones
                             _dnsServer.AuthZoneManager.LoadAllZoneFiles();
                             InspectAndFixZonePermissions();
+                        }
+                    }
+
+                    if (updateCertInClusterPrimaryZone)
+                    {
+                        //cert may have changed so update cert in cluster primary zone when restoring
+                        if (_clusterManager.ClusterInitialized)
+                        {
+                            try
+                            {
+                                _clusterManager.UpdateSelfNodeUrlAndCertificate();
+                            }
+                            catch (Exception ex)
+                            {
+                                _log.Write(ex);
+                            }
                         }
                     }
 
@@ -1181,7 +1242,7 @@ namespace DnsServerCore
                             {
                                 try
                                 {
-                                    entry.ExtractToFile(Path.Combine(_configFolder, "blocklists", entry.Name), true);
+                                    await entry.ExtractToFileAsync(Path.Combine(_configFolder, "blocklists", entry.Name), true);
                                 }
                                 catch (IOException)
                                 {
@@ -1335,22 +1396,28 @@ namespace DnsServerCore
                             {
                                 if (entry.FullName.StartsWith("apps/"))
                                 {
-                                    string entryPath = entry.FullName;
+                                    string filePath = Path.GetFullPath(Path.Combine(_configFolder, entry.FullName));
+                                    if (!filePath.StartsWith(_configFolder.TrimEnd(['/', '\\']) + Path.DirectorySeparatorChar))
+                                        throw new IOException("Extracting Zip entry would have resulted in a file outside the specified destination directory.");
 
-                                    if (Path.DirectorySeparatorChar != '/')
-                                        entryPath = entryPath.Replace('/', '\\');
-
-                                    string filePath = Path.Combine(_configFolder, entryPath);
-
-                                    Directory.CreateDirectory(Path.GetDirectoryName(filePath));
-
-                                    try
+                                    if ((entry.Length == 0) && (entry.Name.Length == 0) && entry.FullName.EndsWith('/'))
                                     {
-                                        entry.ExtractToFile(filePath, true);
+                                        //directory entry
+                                        Directory.CreateDirectory(filePath);
                                     }
-                                    catch (Exception ex)
+                                    else
                                     {
-                                        _log.Write(ex);
+                                        //file entry
+                                        Directory.CreateDirectory(Path.GetDirectoryName(filePath));
+
+                                        try
+                                        {
+                                            await entry.ExtractToFileAsync(filePath, true);
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            _log.Write(ex);
+                                        }
                                     }
                                 }
                             }
@@ -1392,7 +1459,7 @@ namespace DnsServerCore
                                 {
                                     try
                                     {
-                                        entry.ExtractToFile(Path.Combine(_configFolder, "scopes", entry.Name), true);
+                                        await entry.ExtractToFileAsync(Path.Combine(_configFolder, "scopes", entry.Name), true);
                                     }
                                     catch (Exception ex)
                                     {
@@ -1449,7 +1516,7 @@ namespace DnsServerCore
                             {
                                 try
                                 {
-                                    entry.ExtractToFile(Path.Combine(_configFolder, "stats", entry.Name), true);
+                                    await entry.ExtractToFileAsync(Path.Combine(_configFolder, "stats", entry.Name), true);
                                 }
                                 catch (Exception ex)
                                 {
@@ -1512,7 +1579,7 @@ namespace DnsServerCore
             if (Path.IsPathRooted(path))
                 return path;
 
-            return Path.Combine(_configFolder, path);
+            return Path.GetFullPath(Path.Combine(_configFolder, path));
         }
 
         private void RestartService(bool restartDnsService, bool restartWebService)
@@ -1541,7 +1608,7 @@ namespace DnsServerCore
                         }
                         catch (Exception ex)
                         {
-                            _log.Write("Failed to restart web service.\r\n" + ex.ToString());
+                            _log.Write("Failed to restart web service.", ex);
                         }
 
                         //update cluster node URL to reflect latest TLS port
@@ -1567,7 +1634,7 @@ namespace DnsServerCore
                     }
                     catch (Exception ex)
                     {
-                        _log.Write("Failed to restart DNS service.\r\n" + ex.ToString());
+                        _log.Write("Failed to restart DNS service.", ex);
                     }
                 }
             });
@@ -1610,7 +1677,7 @@ namespace DnsServerCore
             }
             catch (Exception ex)
             {
-                _log.Write("Web Service failed to start: " + ex.ToString());
+                _log.Write("Web Service failed to start.", ex);
             }
 
             _log.Write("Attempting to revert Web Service end point changes ...");
@@ -1623,31 +1690,35 @@ namespace DnsServerCore
 
                 await StartWebServiceAsync(false);
 
-                SaveConfigFileInternal(); //save reverted changes
+                lock (_saveLock)
+                {
+                    SaveConfigFileInternal(); //save reverted changes
+                }
+
                 return;
             }
             catch (Exception ex2)
             {
-                _log.Write("Web Service failed to start: " + ex2.ToString());
+                _log.Write("Web Service failed to start.", ex2);
             }
 
             _log.Write("Attempting to start Web Service on ANY (0.0.0.0) fallback address...");
 
             try
             {
-                _webServiceLocalAddresses = new IPAddress[] { IPAddress.Any };
+                _webServiceLocalAddresses = [IPAddress.Any];
 
                 await StartWebServiceAsync(true);
                 return;
             }
             catch (Exception ex3)
             {
-                _log.Write("Web Service failed to start: " + ex3.ToString());
+                _log.Write("Web Service failed to start.", ex3);
             }
 
             _log.Write("Attempting to start Web Service on loopback (127.0.0.1) fallback address...");
 
-            _webServiceLocalAddresses = new IPAddress[] { IPAddress.Loopback };
+            _webServiceLocalAddresses = [IPAddress.Loopback];
 
             await StartWebServiceAsync(true);
         }
@@ -1693,6 +1764,17 @@ namespace DnsServerCore
 
                     foreach (string scope in _authManager.SsoScopes)
                         options.Scope.Add(scope);
+
+                    //setup user info endpoint json key map for supported claim types
+                    options.ClaimActions.MapUniqueJsonKey("sub", "sub");
+                    options.ClaimActions.MapUniqueJsonKey("email", "email");
+                    options.ClaimActions.MapUniqueJsonKey("preferred_username", "preferred_username");
+                    options.ClaimActions.MapUniqueJsonKey("upn", "upn");
+                    options.ClaimActions.MapUniqueJsonKey("nickname", "nickname");
+                    options.ClaimActions.MapUniqueJsonKey("name", "name");
+                    options.ClaimActions.MapUniqueJsonKey("given_name", "given_name");
+                    options.ClaimActions.MapJsonKey("groups", "groups");
+                    options.ClaimActions.MapJsonKey("roles", "roles");
 
                     options.CallbackPath = new PathString("/sso/callback");
 
@@ -1764,6 +1846,49 @@ namespace DnsServerCore
                 foreach (IPAddress webServiceLocalAddress in _webServiceLocalAddresses)
                     serverOptions.Listen(webServiceLocalAddress, _webServiceHttpPort);
 
+                //http unix socket
+                if (!httpOnlyMode && _webServiceEnableHttpUnixSocket && (_webServiceHttpUnixSocket is not null))
+                {
+                    try
+                    {
+                        if (File.Exists(_webServiceHttpUnixSocket))
+                            File.Delete(_webServiceHttpUnixSocket);
+                    }
+                    catch (Exception ex)
+                    {
+                        _log.Write(ex);
+                    }
+
+                    serverOptions.ListenUnixSocket(_webServiceHttpUnixSocket);
+                }
+
+                //https unix socket
+                if (!httpOnlyMode && _webServiceEnableTlsUnixSocket && (_webServiceTlsUnixSocket is not null) && (_webServiceSslServerAuthenticationOptions is not null))
+                {
+                    try
+                    {
+                        if (File.Exists(_webServiceTlsUnixSocket))
+                            File.Delete(_webServiceTlsUnixSocket);
+                    }
+                    catch (Exception ex)
+                    {
+                        _log.Write(ex);
+                    }
+
+                    serverOptions.ListenUnixSocket(_webServiceTlsUnixSocket, delegate (ListenOptions listenOptions)
+                    {
+                        if (IsHttp2Supported())
+                            listenOptions.Protocols = HttpProtocols.Http1AndHttp2;
+                        else
+                            listenOptions.Protocols = HttpProtocols.Http1;
+
+                        listenOptions.UseHttps(delegate (SslStream stream, SslClientHelloInfo clientHelloInfo, object state, CancellationToken cancellationToken)
+                        {
+                            return ValueTask.FromResult(_webServiceSslServerAuthenticationOptions);
+                        }, null);
+                    });
+                }
+
                 //https
                 if (!httpOnlyMode && _webServiceEnableTls && (_webServiceSslServerAuthenticationOptions is not null))
                 {
@@ -1829,7 +1954,7 @@ namespace DnsServerCore
 
             _webService.UseResponseCompression();
 
-            if (_webServiceHttpToTlsRedirect && !httpOnlyMode && _webServiceEnableTls && (_webServiceSslServerAuthenticationOptions is not null))
+            if (!httpOnlyMode && _webServiceHttpToTlsRedirect && _webServiceEnableTls && (_webServiceSslServerAuthenticationOptions is not null))
                 _webService.Use(WebServiceHttpsRedirectionMiddleware);
 
             _webService.UseDefaultFiles();
@@ -1839,7 +1964,6 @@ namespace DnsServerCore
                 {
                     ctx.Context.Response.Headers["X-Robots-Tag"] = "noindex, nofollow";
                     ctx.Context.Response.Headers.CacheControl = "no-cache";
-                    ctx.Context.Response.Headers.XFrameOptions = "DENY";
                     ctx.Context.Response.Headers.XContentTypeOptions = "nosniff";
                     ctx.Context.Response.Headers["Referrer-Policy"] = "same-origin";
                     ctx.Context.Response.Headers.ContentSecurityPolicy =
@@ -1847,7 +1971,10 @@ namespace DnsServerCore
                         "script-src 'self' 'unsafe-inline' 'unsafe-eval'; " +
                         "style-src 'self' 'unsafe-inline'; " +
                         "img-src 'self' data:; " +
-                        "frame-ancestors 'none';";
+                        $"frame-ancestors {_webServiceCspFrameAncestorsHeader};";
+
+                    if (_webServiceCspFrameAncestorsHeader.Equals("'none'", StringComparison.OrdinalIgnoreCase))
+                        ctx.Context.Response.Headers.XFrameOptions = "DENY";
                 },
                 ServeUnknownFileTypes = true
             });
@@ -1865,6 +1992,12 @@ namespace DnsServerCore
                     if (!httpOnlyMode && _webServiceEnableTls && (_webServiceSslServerAuthenticationOptions is not null))
                         _log.Write(new IPEndPoint(webServiceLocalAddress, _webServiceTlsPort), "Https", "Web Service was bound successfully.");
                 }
+
+                if (!httpOnlyMode && _webServiceEnableHttpUnixSocket && (_webServiceHttpUnixSocket is not null))
+                    _log.Write(new UnixDomainSocketEndPoint(_webServiceHttpUnixSocket), "HttpUnix", "Web Service was bound successfully.");
+
+                if (!httpOnlyMode && _webServiceEnableTlsUnixSocket && (_webServiceTlsUnixSocket is not null) && (_webServiceSslServerAuthenticationOptions is not null))
+                    _log.Write(new UnixDomainSocketEndPoint(_webServiceTlsUnixSocket), "HttpsUnix", "Web Service was bound successfully.");
             }
             catch
             {
@@ -1877,6 +2010,12 @@ namespace DnsServerCore
                     if (!httpOnlyMode && _webServiceEnableTls && (_webServiceSslServerAuthenticationOptions is not null))
                         _log.Write(new IPEndPoint(webServiceLocalAddress, _webServiceTlsPort), "Https", "Web Service failed to bind.");
                 }
+
+                if (!httpOnlyMode && _webServiceEnableHttpUnixSocket && (_webServiceHttpUnixSocket is not null))
+                    _log.Write(new UnixDomainSocketEndPoint(_webServiceHttpUnixSocket), "HttpUnix", "Web Service failed to bind.");
+
+                if (!httpOnlyMode && _webServiceEnableTlsUnixSocket && (_webServiceTlsUnixSocket is not null) && (_webServiceSslServerAuthenticationOptions is not null))
+                    _log.Write(new UnixDomainSocketEndPoint(_webServiceTlsUnixSocket), "HttpsUnix", "Web Service failed to bind.");
 
                 throw;
             }
@@ -1918,14 +2057,11 @@ namespace DnsServerCore
         {
             try
             {
-                IPAddress remoteIP = context.Connection.RemoteIpAddress;
-                if (remoteIP is null)
-                    return new IPEndPoint(IPAddress.Any, 0);
-
-                if (remoteIP.IsIPv4MappedToIPv6)
+                IPAddress remoteIP = context.Connection.RemoteIpAddress; //will be null for unix socket
+                if ((remoteIP is not null) && remoteIP.IsIPv4MappedToIPv6)
                     remoteIP = remoteIP.MapToIPv4();
 
-                if (!string.IsNullOrEmpty(_webServiceRealIpHeader) && NetworkAccessControl.IsAddressAllowed(remoteIP, _webServiceReverseProxyAddresses))
+                if (!string.IsNullOrEmpty(_webServiceRealIpHeader) && ((remoteIP is null) || NetworkAccessControl.IsAddressAllowed(remoteIP, _webServiceReverseProxyAddresses)))
                 {
                     //get the real IP address of the requesting client from X-Real-IP header set in nginx proxy_pass block
                     string xRealIp = context.Request.Headers[_webServiceRealIpHeader];
@@ -1933,12 +2069,13 @@ namespace DnsServerCore
                         return new IPEndPoint(address, 0);
                 }
 
-                return new IPEndPoint(remoteIP, context.Connection.RemotePort);
+                if (remoteIP is not null)
+                    return new IPEndPoint(remoteIP, context.Connection.RemotePort);
             }
             catch
-            {
-                return new IPEndPoint(IPAddress.Any, 0);
-            }
+            { }
+
+            return IPENDPOINT_ANY_0;
         }
 
         private void ConfigureWebServiceRoutes()
@@ -1949,9 +2086,12 @@ namespace DnsServerCore
 
             _webService.UseRouting();
 
+            //status
+            _webService.MapGetAndPost("/api/status", _authApi.StatusAsync);
+
             //sso
             _webService.MapGetAndPost("/sso/login", _authApi.SsoLoginAsync);
-            _webService.MapGetAndPost("/api/sso/status", _authApi.SsoStatusAsync);
+            _webService.MapGetAndPost("/api/sso/status", _authApi.StatusAsync); //depricated
 
             //user auth
             _webService.MapGetAndPost("/api/user/login", delegate (HttpContext context) { return _authApi.LoginAsync(context, UserSessionType.Standard); });
@@ -2048,6 +2188,7 @@ namespace DnsServerCore
 
             //dns client
             _webService.MapGetAndPost("/api/dnsClient/resolve", _api.ResolveQueryAsync);
+            _webService.MapGetAndPost("/api/dnsClient/healthCheck", _api.HealthCheckAsync);
 
             //settings
             _webService.MapGetAndPost("/api/settings/get", _settingsApi.GetDnsSettings);
@@ -2168,6 +2309,7 @@ namespace DnsServerCore
 
                 case "/sso/login":
                 case "/sso/callback":
+                case "/api/status":
                 case "/api/sso/status":
 
                 case "/api/user/login":
@@ -2183,7 +2325,7 @@ namespace DnsServerCore
 
         private Task WebServiceHttpsRedirectionMiddleware(HttpContext context, RequestDelegate next)
         {
-            if (context.Request.IsHttps)
+            if (context.Request.IsHttps || (context.Connection.RemoteIpAddress is null)) //no redirect for unix socket connection too
                 return next(context);
 
             context.Response.Redirect("https://" + (context.Request.Host.HasValue ? context.Request.Host.Host : _dnsServer.ServerDomain) + (_webServiceTlsPort == 443 ? "" : ":" + _webServiceTlsPort) + context.Request.Path + (context.Request.QueryString.HasValue ? context.Request.QueryString.Value : ""), false, true);
@@ -2248,6 +2390,7 @@ namespace DnsServerCore
 
             switch (request.Path)
             {
+                case "/api/status":
                 case "/api/sso/status":
                 case "/api/user/login":
                 case "/api/user/createToken":
@@ -2518,7 +2661,7 @@ namespace DnsServerCore
                         }
                         catch (Exception ex)
                         {
-                            _log.Write("DNS Server encountered an error while updating Web Service TLS Certificate: " + webServiceTlsCertificatePath + "\r\n" + ex.ToString());
+                            _log.Write("DNS Server encountered an error while updating Web Service TLS Certificate: " + webServiceTlsCertificatePath, ex);
                         }
                     }
                 }, null, TLS_CERTIFICATE_UPDATE_TIMER_INITIAL_INTERVAL, TLS_CERTIFICATE_UPDATE_TIMER_INTERVAL);
@@ -2610,14 +2753,7 @@ namespace DnsServerCore
 
             webServiceTlsCertificatePath = ConvertToAbsolutePath(webServiceTlsCertificatePath);
 
-            try
-            {
-                LoadWebServiceTlsCertificate(webServiceTlsCertificatePath, webServiceTlsCertificatePassword);
-            }
-            catch (Exception ex)
-            {
-                _log.Write("DNS Server encountered an error while loading Web Service TLS Certificate: " + webServiceTlsCertificatePath + "\r\n" + ex.ToString());
-            }
+            LoadWebServiceTlsCertificate(webServiceTlsCertificatePath, webServiceTlsCertificatePassword);
 
             _webServiceTlsCertificatePath = ConvertToRelativePath(webServiceTlsCertificatePath);
             _webServiceTlsCertificatePassword = webServiceTlsCertificatePassword;
@@ -2661,7 +2797,7 @@ namespace DnsServerCore
                     File.WriteAllBytes(selfSignedCertificateFilePath, cert.Export(X509ContentType.Pkcs12, null as string));
                 }
 
-                if (_webServiceEnableTls && string.IsNullOrEmpty(_webServiceTlsCertificatePath))
+                if ((_webServiceSslServerAuthenticationOptions is null) || string.IsNullOrEmpty(_webServiceTlsCertificatePath))
                 {
                     try
                     {
@@ -2681,7 +2817,7 @@ namespace DnsServerCore
                     }
                     catch (Exception ex)
                     {
-                        _log.Write("DNS Server encountered an error while loading self signed Web Service TLS certificate: " + selfSignedCertificateFilePath + "\r\n" + ex.ToString());
+                        _log.Write("DNS Server encountered an error while loading self signed Web Service TLS certificate: " + selfSignedCertificateFilePath, ex);
 
                         if (throwException)
                             throw;
@@ -2692,26 +2828,6 @@ namespace DnsServerCore
             {
                 File.Delete(selfSignedCertificateFilePath);
             }
-        }
-
-        #endregion
-
-        #region quic
-
-        private static void ValidateQuicSupport(string protocolName = "DNS-over-QUIC")
-        {
-            if (!QuicConnection.IsSupported)
-            {
-                if (!Socket.OSSupportsIPv6)
-                    throw new DnsWebServiceException(protocolName + " requires IPv6 support on the system to work.");
-
-                throw new DnsWebServiceException(protocolName + " is supported only on Windows 11 (build 22000 and later), Windows Server 2022 (and later), and Linux. On Linux, you must install 'libmsquic' manually.");
-            }
-        }
-
-        private static bool IsQuicSupported()
-        {
-            return QuicConnection.IsSupported;
         }
 
         #endregion
@@ -2841,7 +2957,7 @@ namespace DnsServerCore
             }
             catch (Exception ex)
             {
-                _log.Write("Failed to start DNS Server (v" + _currentVersion.ToString() + ")\r\n" + ex.ToString());
+                _log.Write("Failed to start DNS Server (v" + _currentVersion.ToString() + ").", ex);
                 throw;
             }
         }
@@ -2871,7 +2987,7 @@ namespace DnsServerCore
             }
             catch (Exception ex)
             {
-                _log.Write("Failed to stop DNS Server (v" + _currentVersion.ToString() + ")\r\n" + ex.ToString());
+                _log.Write("Failed to stop DNS Server (v" + _currentVersion.ToString() + ").", ex);
                 throw;
             }
         }

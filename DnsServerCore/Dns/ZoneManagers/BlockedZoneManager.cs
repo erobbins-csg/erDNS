@@ -156,7 +156,7 @@ namespace DnsServerCore.Dns.ZoneManagers
             }
             catch (Exception ex)
             {
-                _dnsServer.LogManager.Write("DNS Server encountered an error while loading blocked zone file: " + blockedZoneFile + "\r\n" + ex.ToString());
+                _dnsServer.LogManager.Write("DNS Server encountered an error while loading blocked zone file: " + blockedZoneFile, ex);
             }
         }
 

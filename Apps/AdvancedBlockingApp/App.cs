@@ -31,6 +31,7 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using TechnitiumLibrary;
+using TechnitiumLibrary.IO;
 using TechnitiumLibrary.Net;
 using TechnitiumLibrary.Net.Dns;
 using TechnitiumLibrary.Net.Dns.EDnsOptions;
@@ -370,7 +371,7 @@ namespace AdvancedBlocking
 
                     return new Tuple<EndPoint, string>(ep, jsonGroup.GetString() ?? "");
                 },
-                out Dictionary<EndPoint, string> localEndPointGroupMap))
+                out Dictionary<EndPoint, string>? localEndPointGroupMap))
             {
                 _localEndPointGroupMap = localEndPointGroupMap;
             }
@@ -452,7 +453,7 @@ namespace AdvancedBlocking
                     }
 
                     return new Tuple<string, Group>(group.Name, group);
-                });
+                }) ?? [];
 
                 _allAllowListZones = allAllowListZones;
                 _allBlockListZones = allBlockListZones;
@@ -926,17 +927,17 @@ namespace AdvancedBlocking
                     _aaaaRecords = [];
                 }
 
-                _allowed = jsonGroup.ReadArrayAsSet("allowed");
-                _blocked = jsonGroup.ReadArrayAsSet("blocked");
-                _allowListUrls = jsonGroup.ReadArray("allowListUrls", GetUriEntry);
-                _blockListUrls = jsonGroup.ReadArray("blockListUrls", GetUrlEntry);
+                _allowed = jsonGroup.ReadArrayAsSet("allowed") ?? [];
+                _blocked = jsonGroup.ReadArrayAsSet("blocked") ?? [];
+                _allowListUrls = jsonGroup.ReadArray("allowListUrls", GetUriEntry) ?? [];
+                _blockListUrls = jsonGroup.ReadArray("blockListUrls", GetUrlEntry) ?? [];
 
-                _allowedRegex = jsonGroup.ReadArray("allowedRegex", GetRegexEntry);
-                _blockedRegex = jsonGroup.ReadArray("blockedRegex", GetRegexEntry);
-                _regexAllowListUrls = jsonGroup.ReadArray("regexAllowListUrls", GetUriEntry);
-                _regexBlockListUrls = jsonGroup.ReadArray("regexBlockListUrls", GetUrlEntry);
+                _allowedRegex = jsonGroup.ReadArray("allowedRegex", GetRegexEntry) ?? [];
+                _blockedRegex = jsonGroup.ReadArray("blockedRegex", GetRegexEntry) ?? [];
+                _regexAllowListUrls = jsonGroup.ReadArray("regexAllowListUrls", GetUriEntry) ?? [];
+                _regexBlockListUrls = jsonGroup.ReadArray("regexBlockListUrls", GetUrlEntry) ?? [];
 
-                _adblockListUrls = jsonGroup.ReadArray("adblockListUrls", GetUrlEntry);
+                _adblockListUrls = jsonGroup.ReadArray("adblockListUrls", GetUrlEntry) ?? [];
             }
 
             #endregion
@@ -1203,17 +1204,20 @@ namespace AdvancedBlocking
                             if (File.Exists(_listFilePath))
                                 http.DefaultRequestHeaders.IfModifiedSince = File.GetLastWriteTimeUtc(_listFilePath);
 
-                            HttpResponseMessage httpResponse = await http.GetAsync(_listUrl);
+                            http.DefaultRequestHeaders.UserAgent.TryParseAdd("Technitium DNS Server");
+
+                            HttpResponseMessage httpResponse = await http.GetAsync(_listUrl, HttpCompletionOption.ResponseHeadersRead);
                             switch (httpResponse.StatusCode)
                             {
                                 case HttpStatusCode.OK:
                                     string listDownloadFilePath = _listFilePath + ".downloading";
 
-                                    using (FileStream fS = new FileStream(listDownloadFilePath, FileMode.Create, FileAccess.Write))
+                                    await using (FileStream fS = new FileStream(listDownloadFilePath, FileMode.Create, FileAccess.Write))
                                     {
-                                        using (Stream httpStream = await httpResponse.Content.ReadAsStreamAsync())
+                                        await using (Stream httpStream = await httpResponse.Content.ReadAsStreamAsync())
                                         {
-                                            await httpStream.CopyToAsync(fS);
+                                            //copy stream with idle timeout
+                                            await httpStream.CopyToAsync(fS, TimeSpan.FromSeconds(60));
                                         }
                                     }
 
@@ -1244,7 +1248,7 @@ namespace AdvancedBlocking
                 }
                 catch (Exception ex)
                 {
-                    _dnsServer.WriteLog("Advanced Blocking app failed to download " + (_isAdblockList ? "adblock" : (_isRegexList ? "regex " : "") + (_isAllowList ? "allow" : "block")) + " list and will use previously downloaded file (if available): " + _listUrl.AbsoluteUri + "\r\n" + ex.ToString());
+                    _dnsServer.WriteLog("Advanced Blocking app failed to download " + (_isAdblockList ? "adblock" : (_isRegexList ? "regex " : "") + (_isAllowList ? "allow" : "block")) + " list and will use previously downloaded file (if available): " + _listUrl.AbsoluteUri, ex);
                     return false;
                 }
             }
@@ -1449,7 +1453,7 @@ namespace AdvancedBlocking
                 }
                 catch (Exception ex)
                 {
-                    _dnsServer.WriteLog("Advanced Blocking app failed to read " + (_isAllowList ? "allow" : "block") + " list from: " + _listUrl.AbsoluteUri + "\r\n" + ex.ToString());
+                    _dnsServer.WriteLog("Advanced Blocking app failed to read " + (_isAllowList ? "allow" : "block") + " list from: " + _listUrl.AbsoluteUri, ex);
                 }
 
                 return domains;
@@ -1537,7 +1541,7 @@ namespace AdvancedBlocking
                 }
                 catch (Exception ex)
                 {
-                    _dnsServer.WriteLog("Advanced Blocking app failed to read regex " + (_isAllowList ? "allow" : "block") + " list from: " + _listUrl.AbsoluteUri + "\r\n" + ex.ToString());
+                    _dnsServer.WriteLog("Advanced Blocking app failed to read regex " + (_isAllowList ? "allow" : "block") + " list from: " + _listUrl.AbsoluteUri, ex);
                 }
 
                 return regices;
@@ -1673,7 +1677,7 @@ namespace AdvancedBlocking
                 }
                 catch (Exception ex)
                 {
-                    _dnsServer.WriteLog("Advanced Blocking app failed to read adblock list from: " + _listUrl.AbsoluteUri + "\r\n" + ex.ToString());
+                    _dnsServer.WriteLog("Advanced Blocking app failed to read adblock list from: " + _listUrl.AbsoluteUri, ex);
                 }
             }
 

@@ -37,14 +37,14 @@ namespace FilterAaaa
 
         readonly static JsonDocumentOptions _jsonParseOptions = new JsonDocumentOptions() { CommentHandling = JsonCommentHandling.Skip };
 
-        IDnsServer _dnsServer;
+        IDnsServer? _dnsServer;
 
         bool _enableFilterAaaa;
         uint _defaultTtl;
         bool _bypassLocalZones;
-        NetworkAddress[] _bypassNetworks;
-        string[] _bypassDomains;
-        string[] _filterDomains;
+        NetworkAddress[] _bypassNetworks = [];
+        string[] _bypassDomains = [];
+        string[] _filterDomains = [];
 
         #endregion
 
@@ -59,9 +59,12 @@ namespace FilterAaaa
 
         #region public
 
-        public async Task InitializeAsync(IDnsServer dnsServer, string config)
+        public async Task InitializeAsync(IDnsServer dnsServer, string? config)
         {
             _dnsServer = dnsServer;
+
+            if (config is null)
+                throw new InvalidOperationException();
 
             using JsonDocument jsonDocument = JsonDocument.Parse(config, _jsonParseOptions);
             JsonElement jsonConfig = jsonDocument.RootElement;
@@ -84,17 +87,17 @@ namespace FilterAaaa
 
             _bypassLocalZones = jsonConfig.GetPropertyValue("bypassLocalZones", false);
 
-            if (jsonConfig.TryReadArray("bypassNetworks", NetworkAddress.Parse, out NetworkAddress[] bypassNetworks))
+            if (jsonConfig.TryReadArray("bypassNetworks", NetworkAddress.Parse, out NetworkAddress[]? bypassNetworks) && (bypassNetworks is not null))
                 _bypassNetworks = bypassNetworks;
             else
                 _bypassNetworks = [];
 
-            if (jsonConfig.TryReadArray("bypassDomains", out string[] bypassDomains))
+            if (jsonConfig.TryReadArray("bypassDomains", out string[]? bypassDomains) && (bypassDomains is not null))
                 _bypassDomains = bypassDomains;
             else
                 _bypassDomains = [];
 
-            if (jsonConfig.TryReadArray("filterDomains", out string[] filterDomains))
+            if (jsonConfig.TryReadArray("filterDomains", out string[]? filterDomains) && (filterDomains is not null))
             {
                 _filterDomains = filterDomains;
             }
@@ -109,7 +112,7 @@ namespace FilterAaaa
             }
         }
 
-        public async Task<DnsDatagram> PostProcessAsync(DnsDatagram request, IPEndPoint remoteEP, DnsTransportProtocol protocol, DnsDatagram response)
+        public async Task<DnsDatagram?> PostProcessAsync(DnsDatagram request, IPEndPoint remoteEP, DnsTransportProtocol protocol, DnsDatagram response)
         {
             if (!_enableFilterAaaa)
                 return response;
@@ -187,7 +190,7 @@ namespace FilterAaaa
             if (!filterDomain)
                 return response;
 
-            DnsDatagram aResponse = await _dnsServer.DirectQueryAsync(new DnsQuestionRecord(qname, DnsResourceRecordType.A, DnsClass.IN), 2000);
+            DnsDatagram aResponse = await _dnsServer!.DirectQueryAsync(new DnsQuestionRecord(qname, DnsResourceRecordType.A, DnsClass.IN), 2000);
 
             if (aResponse.RCODE != DnsResponseCode.NoError)
                 return response;
@@ -204,13 +207,13 @@ namespace FilterAaaa
                         if (record2.Type == DnsResourceRecordType.CNAME)
                         {
                             answer.Add(record2);
-                            qname = (record2.RDATA as DnsCNAMERecordData).Domain;
+                            qname = (record2.RDATA as DnsCNAMERecordData)!.Domain;
                         }
                     }
 
                     DnsResourceRecord[] authority = [new DnsResourceRecord(qname, DnsResourceRecordType.SOA, DnsClass.IN, _defaultTtl, new DnsSOARecordData(_dnsServer.ServerDomain, _dnsServer.ResponsiblePerson.Address, 1, 3600, 900, 86400, _defaultTtl))];
 
-                    return new DnsDatagram(response.Identifier, true, response.OPCODE, false, false, response.RecursionDesired, response.RecursionAvailable, false, false, DnsResponseCode.NoError, response.Question, answer, authority);
+                    return new DnsDatagram(response.Identifier, true, response.OPCODE, false, false, response.RecursionDesired, response.RecursionAvailable, false, false, DnsResponseCode.NoError, response.Question, answer, authority) { Tag = response.Tag };
                 }
             }
 

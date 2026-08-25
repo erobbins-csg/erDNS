@@ -25,6 +25,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Net.Mail;
+using System.Net.Quic;
 using System.Net.Sockets;
 using System.Text;
 using TechnitiumLibrary.IO;
@@ -61,7 +62,7 @@ namespace DnsServerCore
             }
             catch (Exception ex)
             {
-                _log.Write("DNS Server encountered an error while trying to load old DNS config file: " + configFile + "\r\n" + ex.ToString());
+                _log.Write("DNS Server encountered an error while trying to load old DNS config file: " + configFile, ex);
             }
 
             return false;
@@ -78,7 +79,7 @@ namespace DnsServerCore
                 ReadOldConfigFrom(bR, version);
 
                 s.Dispose();
-                _dnsServer.SaveConfigFileInternal();
+                _dnsServer.SaveConfigFile(true);
 
                 return true;
             }
@@ -103,8 +104,8 @@ namespace DnsServerCore
                 UdpClientConnection.SocketPoolExcludedPorts = [(ushort)_webServiceTlsPort];
                 _dnsServer.MaxConcurrentResolutionsPerCore = 100;
                 _dnsServer.DnsApplicationManager.EnableAutomaticUpdate = true;
-                _webServiceEnableHttp3 = _webServiceEnableTls && IsQuicSupported();
-                _dnsServer.EnableDnsOverHttp3 = _dnsServer.EnableDnsOverHttps && IsQuicSupported();
+                _webServiceEnableHttp3 = _webServiceEnableTls && QuicConnection.IsSupported && Socket.OSSupportsIPv6;
+                _dnsServer.EnableDnsOverHttp3 = _dnsServer.EnableDnsOverHttps && QuicConnection.IsSupported && Socket.OSSupportsIPv6;
                 _webServiceRealIpHeader = "X-Real-IP";
                 _dnsServer.DnsOverHttpRealIpHeader = "X-Real-IP";
                 _dnsServer.DefaultResponsiblePerson = null;
@@ -180,7 +181,7 @@ namespace DnsServerCore
                 if (version >= 33)
                     _webServiceEnableHttp3 = bR.ReadBoolean();
                 else
-                    _webServiceEnableHttp3 = _webServiceEnableTls && IsQuicSupported();
+                    _webServiceEnableHttp3 = _webServiceEnableTls && QuicConnection.IsSupported && Socket.OSSupportsIPv6;
 
                 _webServiceHttpToTlsRedirect = bR.ReadBoolean();
                 _webServiceUseSelfSignedTlsCertificate = bR.ReadBoolean();
@@ -205,7 +206,7 @@ namespace DnsServerCore
                     }
                     catch (Exception ex)
                     {
-                        _log.Write("DNS Server encountered an error while loading Web Service TLS certificate: " + webServiceTlsCertificatePath + "\r\n" + ex.ToString());
+                        _log.Write("DNS Server encountered an error while loading Web Service TLS certificate: " + webServiceTlsCertificatePath, ex);
                     }
 
                     StartTlsCertificateUpdateTimer();
@@ -454,7 +455,7 @@ namespace DnsServerCore
                 if (version >= 37)
                     _dnsServer.EnableDnsOverHttp3 = bR.ReadBoolean();
                 else
-                    _dnsServer.EnableDnsOverHttp3 = _dnsServer.EnableDnsOverHttps && IsQuicSupported();
+                    _dnsServer.EnableDnsOverHttp3 = _dnsServer.EnableDnsOverHttps && QuicConnection.IsSupported && Socket.OSSupportsIPv6;
 
                 if (version >= 32)
                 {
@@ -831,7 +832,7 @@ namespace DnsServerCore
                     }
                     catch (Exception ex)
                     {
-                        _log.Write("DNS Server encountered an error while loading Web Service TLS certificate: " + webServiceTlsCertificatePath + "\r\n" + ex.ToString());
+                        _log.Write("DNS Server encountered an error while loading Web Service TLS certificate: " + webServiceTlsCertificatePath, ex);
                     }
 
                     StartTlsCertificateUpdateTimer();

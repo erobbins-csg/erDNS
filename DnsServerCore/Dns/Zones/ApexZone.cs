@@ -454,7 +454,7 @@ namespace DnsServerCore.Dns.Zones
                         _notifyFailed.Add(nameServerHost);
                 }
 
-                _dnsServer.LogManager.Write("DNS Server failed to notify name server '" + nameServerHost + "' for zone: " + ToString() + "\r\n" + ex.ToString());
+                _dnsServer.LogManager.Write("DNS Server failed to notify name server '" + nameServerHost + "' for zone: " + ToString(), ex);
             }
             finally
             {
@@ -772,7 +772,7 @@ namespace DnsServerCore.Dns.Zones
                     //transitioning to date scheme
                     return uint.Parse(strSerialDate + counter.ToString().PadLeft(2, '0'));
                 }
-                else if (strSerialDate.Equals(strOldSerialDate))
+                else if (strSerialDate.Equals(strOldSerialDate, StringComparison.Ordinal))
                 {
                     //same date
                     if (counter < 99)

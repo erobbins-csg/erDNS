@@ -187,6 +187,8 @@ namespace DnsServerCore.HttpApi
 
             HttpResponseMessage httpResponse = await _httpClient.SendAsync(httpRequest, cancellationToken);
 
+            httpResponse.EnsureSuccessStatusCode();
+
             using JsonDocument jsonDoc = await JsonDocument.ParseAsync(httpResponse.Content.ReadAsStream(cancellationToken), cancellationToken: cancellationToken);
             JsonElement rootElement = jsonDoc.RootElement;
 
@@ -242,6 +244,8 @@ namespace DnsServerCore.HttpApi
 
             HttpResponseMessage httpResponse = await _httpClient.SendAsync(httpRequest, cancellationToken);
 
+            httpResponse.EnsureSuccessStatusCode();
+
             using JsonDocument jsonDoc = await JsonDocument.ParseAsync(httpResponse.Content.ReadAsStream(cancellationToken), cancellationToken: cancellationToken);
             JsonElement rootElement = jsonDoc.RootElement;
 
@@ -267,6 +271,8 @@ namespace DnsServerCore.HttpApi
             HttpRequestMessage httpRequest = new HttpRequestMessage(HttpMethod.Get, new Uri(_serverUrl, path));
 
             HttpResponseMessage httpResponse = await _httpClient.SendAsync(httpRequest, cancellationToken);
+
+            httpResponse.EnsureSuccessStatusCode();
 
             using JsonDocument jsonDoc = await JsonDocument.ParseAsync(httpResponse.Content.ReadAsStream(cancellationToken), cancellationToken: cancellationToken);
             JsonElement rootElement = jsonDoc.RootElement;
@@ -299,10 +305,11 @@ namespace DnsServerCore.HttpApi
             }
 
             HttpRequestMessage httpRequest = new HttpRequestMessage(HttpMethod.Post, new Uri(_serverUrl, $"api/settings/set?actingUser={Uri.EscapeDataString(actingUsername)}"));
-
             httpRequest.Content = new FormUrlEncodedContent(clusterParameters);
 
             HttpResponseMessage httpResponse = await _httpClient.SendAsync(httpRequest, cancellationToken);
+
+            httpResponse.EnsureSuccessStatusCode();
 
             using JsonDocument jsonDoc = await JsonDocument.ParseAsync(httpResponse.Content.ReadAsStream(cancellationToken), cancellationToken: cancellationToken);
             JsonElement rootElement = jsonDoc.RootElement;
@@ -484,7 +491,9 @@ namespace DnsServerCore.HttpApi
             HttpRequestMessage httpRequest = new HttpRequestMessage(HttpMethod.Get, $"api/admin/cluster/primary/transferConfig?includeZones={(includeZones is null ? "" : includeZones.Join(','))}");
             httpRequest.Headers.IfModifiedSince = ifModifiedSince;
 
-            HttpResponseMessage httpResponse = await _httpClient.SendAsync(httpRequest, cancellationToken);
+            HttpResponseMessage httpResponse = await _httpClient.SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+
+            httpResponse.EnsureSuccessStatusCode();
 
             return (httpResponse.Content.ReadAsStream(cancellationToken), httpResponse.Content.Headers.LastModified?.UtcDateTime ?? DateTime.UtcNow);
         }
@@ -610,10 +619,12 @@ namespace DnsServerCore.HttpApi
                 }
             }
 
-            HttpResponseMessage httpResponse = await _httpClient.SendAsync(httpRequest, cancellationToken);
+            HttpResponseMessage httpResponse = await _httpClient.SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
 
             //receive http response and write to output http response
             HttpResponse outHttpResponse = context.Response;
+
+            outHttpResponse.StatusCode = (int)httpResponse.StatusCode;
 
             foreach (KeyValuePair<string, IEnumerable<string>> header in httpResponse.Headers)
             {

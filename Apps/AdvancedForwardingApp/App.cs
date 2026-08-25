@@ -20,6 +20,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 using DnsServerCore.ApplicationCommon;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Net;
 using System.Text.Json;
@@ -38,15 +39,15 @@ namespace AdvancedForwarding
 
         readonly static JsonDocumentOptions _jsonParseOptions = new JsonDocumentOptions() { CommentHandling = JsonCommentHandling.Skip };
 
-        IDnsServer _dnsServer;
+        IDnsServer? _dnsServer;
 
         byte _appPreference;
 
         bool _enableForwarding;
-        Dictionary<string, ConfigProxyServer> _configProxyServers;
-        Dictionary<string, ConfigForwarder> _configForwarders;
-        Dictionary<NetworkAddress, string> _networkGroupMap;
-        Dictionary<string, Group> _groups;
+        Dictionary<string, ConfigProxyServer>? _configProxyServers;
+        Dictionary<string, ConfigForwarder>? _configForwarders;
+        Dictionary<NetworkAddress, string>? _networkGroupMap;
+        Dictionary<string, Group>? _groups;
 
         #endregion
 
@@ -65,7 +66,7 @@ namespace AdvancedForwarding
 
         #region private
 
-        private static List<DnsForwarderRecordData> GetUpdatedForwarderRecords(IReadOnlyList<DnsForwarderRecordData> forwarderRecords, bool dnssecValidation, ConfigProxyServer configProxyServer)
+        private static List<DnsForwarderRecordData> GetUpdatedForwarderRecords(IReadOnlyList<DnsForwarderRecordData> forwarderRecords, bool dnssecValidation, ConfigProxyServer? configProxyServer)
         {
             List<DnsForwarderRecordData> newForwarderRecords = new List<DnsForwarderRecordData>(forwarderRecords.Count);
 
@@ -75,12 +76,12 @@ namespace AdvancedForwarding
             return newForwarderRecords;
         }
 
-        private static DnsForwarderRecordData GetForwarderRecord(NameServerAddress forwarder, bool dnssecValidation, ConfigProxyServer configProxyServer)
+        private static DnsForwarderRecordData GetForwarderRecord(NameServerAddress forwarder, bool dnssecValidation, ConfigProxyServer? configProxyServer)
         {
             return GetForwarderRecord(forwarder.Protocol, forwarder.ToString(), dnssecValidation, configProxyServer);
         }
 
-        private static DnsForwarderRecordData GetForwarderRecord(DnsTransportProtocol protocol, string forwarder, bool dnssecValidation, ConfigProxyServer configProxyServer)
+        private static DnsForwarderRecordData GetForwarderRecord(DnsTransportProtocol protocol, string forwarder, bool dnssecValidation, ConfigProxyServer? configProxyServer)
         {
             DnsForwarderRecordData forwarderRecord;
 
@@ -94,12 +95,12 @@ namespace AdvancedForwarding
 
         private Tuple<string, Group> ReadGroup(JsonElement jsonGroup)
         {
-            string name = jsonGroup.GetProperty("name").GetString();
+            string name = jsonGroup.GetProperty("name").ToString();
 
-            if ((_groups is not null) && _groups.TryGetValue(name, out Group group))
+            if ((_groups is not null) && _groups.TryGetValue(name, out Group? group))
                 group.ReloadConfig(_configProxyServers, _configForwarders, jsonGroup);
             else
-                group = new Group(_dnsServer, _configProxyServers, _configForwarders, jsonGroup);
+                group = new Group(_dnsServer!, _configProxyServers, _configForwarders, jsonGroup);
 
             return new Tuple<string, Group>(group.Name, group);
         }
@@ -108,9 +109,12 @@ namespace AdvancedForwarding
 
         #region public
 
-        public Task InitializeAsync(IDnsServer dnsServer, string config)
+        public Task InitializeAsync(IDnsServer dnsServer, string? config)
         {
             _dnsServer = dnsServer;
+
+            if (config is null)
+                throw new InvalidOperationException();
 
             using JsonDocument jsonDocument = JsonDocument.Parse(config, _jsonParseOptions);
             JsonElement jsonConfig = jsonDocument.RootElement;
@@ -123,7 +127,7 @@ namespace AdvancedForwarding
             {
                 ConfigProxyServer proxyServer = new ConfigProxyServer(jsonProxy);
                 return new Tuple<string, ConfigProxyServer>(proxyServer.Name, proxyServer);
-            }, out Dictionary<string, ConfigProxyServer> configProxyServers))
+            }, out Dictionary<string, ConfigProxyServer>? configProxyServers))
                 _configProxyServers = configProxyServers;
             else
                 _configProxyServers = null;
@@ -132,7 +136,7 @@ namespace AdvancedForwarding
             {
                 ConfigForwarder forwarder = new ConfigForwarder(jsonForwarder, _configProxyServers);
                 return new Tuple<string, ConfigForwarder>(forwarder.Name, forwarder);
-            }, out Dictionary<string, ConfigForwarder> configForwarders))
+            }, out Dictionary<string, ConfigForwarder>? configForwarders))
                 _configForwarders = configForwarders;
             else
                 _configForwarders = null;
@@ -142,10 +146,10 @@ namespace AdvancedForwarding
                 if (!NetworkAddress.TryParse(network, out NetworkAddress networkAddress))
                     throw new FormatException("Network group map contains an invalid network address: " + network);
 
-                return new Tuple<NetworkAddress, string>(networkAddress, jsonGroup.GetString());
+                return new Tuple<NetworkAddress, string>(networkAddress, jsonGroup.ToString());
             });
 
-            if (jsonConfig.TryReadArrayAsMap("groups", ReadGroup, out Dictionary<string, Group> groups))
+            if (jsonConfig.TryReadArrayAsMap("groups", ReadGroup, out Dictionary<string, Group>? groups) && (groups is not null))
             {
                 if (_groups is not null)
                 {
@@ -166,16 +170,16 @@ namespace AdvancedForwarding
             return Task.CompletedTask;
         }
 
-        public Task<DnsDatagram> ProcessRequestAsync(DnsDatagram request, IPEndPoint remoteEP, DnsTransportProtocol protocol, bool isRecursionAllowed)
+        public Task<DnsDatagram?> ProcessRequestAsync(DnsDatagram request, IPEndPoint remoteEP, DnsTransportProtocol protocol, bool isRecursionAllowed)
         {
             if (!_enableForwarding || !request.RecursionDesired)
-                return Task.FromResult<DnsDatagram>(null);
+                return Task.FromResult<DnsDatagram?>(null);
 
             IPAddress remoteIP = remoteEP.Address;
-            NetworkAddress network = null;
-            string groupName = null;
+            NetworkAddress? network = null;
+            string? groupName = null;
 
-            foreach (KeyValuePair<NetworkAddress, string> entry in _networkGroupMap)
+            foreach (KeyValuePair<NetworkAddress, string> entry in _networkGroupMap!)
             {
                 if (entry.Key.Contains(remoteIP) && ((network is null) || (entry.Key.PrefixLength > network.PrefixLength)))
                 {
@@ -184,14 +188,14 @@ namespace AdvancedForwarding
                 }
             }
 
-            if ((groupName is null) || !_groups.TryGetValue(groupName, out Group group) || !group.EnableForwarding)
-                return Task.FromResult<DnsDatagram>(null);
+            if ((groupName is null) || !_groups!.TryGetValue(groupName, out Group? group) || !group.EnableForwarding)
+                return Task.FromResult<DnsDatagram?>(null);
 
             DnsQuestionRecord question = request.Question[0];
             string qname = question.Name;
 
-            if (!group.TryGetForwarderRecords(qname, out IReadOnlyList<DnsForwarderRecordData> forwarderRecords))
-                return Task.FromResult<DnsDatagram>(null);
+            if (!group.TryGetForwarderRecords(qname, out IReadOnlyList<DnsForwarderRecordData>? forwarderRecords))
+                return Task.FromResult<DnsDatagram?>(null);
 
             request.SetShadowEDnsClientSubnetOption(network, true);
 
@@ -200,7 +204,7 @@ namespace AdvancedForwarding
             for (int i = 0; i < forwarderRecords.Count; i++)
                 authority[i] = new DnsResourceRecord(qname, DnsResourceRecordType.FWD, DnsClass.IN, 0, forwarderRecords[i]);
 
-            return Task.FromResult(new DnsDatagram(request.Identifier, true, request.OPCODE, false, false, request.RecursionDesired, true, false, false, DnsResponseCode.NoError, request.Question, null, authority));
+            return Task.FromResult<DnsDatagram?>(new DnsDatagram(request.Identifier, true, request.OPCODE, false, false, request.RecursionDesired, true, false, false, DnsResponseCode.NoError, request.Question, null, authority));
         }
 
         #endregion
@@ -220,23 +224,23 @@ namespace AdvancedForwarding
             #region variables
 
             readonly IDnsServer _dnsServer;
-            Dictionary<string, ConfigProxyServer> _configProxyServers;
-            Dictionary<string, ConfigForwarder> _configForwarders;
+            Dictionary<string, ConfigProxyServer>? _configProxyServers;
+            Dictionary<string, ConfigForwarder>? _configForwarders;
 
             readonly string _name;
             bool _enableForwarding;
-            Forwarding[] _forwardings;
-            Dictionary<string, AdGuardUpstream> _adguardUpstreams;
+            Forwarding[]? _forwardings;
+            Dictionary<string, AdGuardUpstream>? _adguardUpstreams;
 
             #endregion
 
             #region constructor
 
-            public Group(IDnsServer dnsServer, Dictionary<string, ConfigProxyServer> configProxyServers, Dictionary<string, ConfigForwarder> configForwarders, JsonElement jsonGroup)
+            public Group(IDnsServer dnsServer, Dictionary<string, ConfigProxyServer>? configProxyServers, Dictionary<string, ConfigForwarder>? configForwarders, JsonElement jsonGroup)
             {
                 _dnsServer = dnsServer;
 
-                _name = jsonGroup.GetProperty("name").GetString();
+                _name = jsonGroup.GetProperty("name").ToString();
 
                 ReloadConfig(configProxyServers, configForwarders, jsonGroup);
             }
@@ -262,9 +266,9 @@ namespace AdvancedForwarding
 
             private Tuple<string, AdGuardUpstream> ReadAdGuardUpstream(JsonElement jsonAdguardUpstream)
             {
-                string name = jsonAdguardUpstream.GetProperty("configFile").GetString();
+                string name = jsonAdguardUpstream.GetProperty("configFile").ToString();
 
-                if ((_adguardUpstreams is not null) && _adguardUpstreams.TryGetValue(name, out AdGuardUpstream adGuardUpstream))
+                if ((_adguardUpstreams is not null) && _adguardUpstreams.TryGetValue(name, out AdGuardUpstream? adGuardUpstream))
                     adGuardUpstream.ReloadConfig(_configProxyServers, jsonAdguardUpstream);
                 else
                     adGuardUpstream = new AdGuardUpstream(_dnsServer, _configProxyServers, jsonAdguardUpstream);
@@ -276,19 +280,19 @@ namespace AdvancedForwarding
 
             #region public
 
-            public void ReloadConfig(Dictionary<string, ConfigProxyServer> configProxyServers, Dictionary<string, ConfigForwarder> configForwarders, JsonElement jsonGroup)
+            public void ReloadConfig(Dictionary<string, ConfigProxyServer>? configProxyServers, Dictionary<string, ConfigForwarder>? configForwarders, JsonElement jsonGroup)
             {
                 _configProxyServers = configProxyServers;
                 _configForwarders = configForwarders;
 
                 _enableForwarding = jsonGroup.GetPropertyValue("enableForwarding", true);
 
-                if (jsonGroup.TryReadArray("forwardings", delegate (JsonElement jsonForwarding) { return new Forwarding(jsonForwarding, _configForwarders); }, out Forwarding[] forwardings))
+                if (jsonGroup.TryReadArray("forwardings", delegate (JsonElement jsonForwarding) { return new Forwarding(jsonForwarding, _configForwarders); }, out Forwarding[]? forwardings))
                     _forwardings = forwardings;
                 else
                     _forwardings = null;
 
-                if (jsonGroup.TryReadArrayAsMap("adguardUpstreams", ReadAdGuardUpstream, out Dictionary<string, AdGuardUpstream> adguardUpstreams))
+                if (jsonGroup.TryReadArrayAsMap("adguardUpstreams", ReadAdGuardUpstream, out Dictionary<string, AdGuardUpstream>? adguardUpstreams) && (adguardUpstreams is not null))
                 {
                     if (_adguardUpstreams is not null)
                     {
@@ -313,7 +317,7 @@ namespace AdvancedForwarding
                 }
             }
 
-            public bool TryGetForwarderRecords(string domain, out IReadOnlyList<DnsForwarderRecordData> forwarderRecords)
+            public bool TryGetForwarderRecords(string domain, [MaybeNullWhen(false)] out IReadOnlyList<DnsForwarderRecordData> forwarderRecords)
             {
                 domain = domain.ToLowerInvariant();
 
@@ -351,22 +355,22 @@ namespace AdvancedForwarding
             #region variables
 
             IReadOnlyList<DnsForwarderRecordData> _forwarderRecords;
-            readonly Dictionary<string, object> _domainMap;
+            readonly HashSet<string> _domains;
 
             #endregion
 
             #region constructor
 
-            public Forwarding(JsonElement jsonForwarding, Dictionary<string, ConfigForwarder> configForwarders)
+            public Forwarding(JsonElement jsonForwarding, Dictionary<string, ConfigForwarder>? configForwarders)
             {
                 JsonElement jsonForwarders = jsonForwarding.GetProperty("forwarders");
                 List<DnsForwarderRecordData> forwarderRecords = new List<DnsForwarderRecordData>();
 
                 foreach (JsonElement jsonForwarder in jsonForwarders.EnumerateArray())
                 {
-                    string forwarderName = jsonForwarder.GetString();
+                    string forwarderName = jsonForwarder.ToString();
 
-                    if ((configForwarders is null) || !configForwarders.TryGetValue(forwarderName, out ConfigForwarder configForwarder))
+                    if ((configForwarders is null) || !configForwarders.TryGetValue(forwarderName, out ConfigForwarder? configForwarder))
                         throw new FormatException("Forwarder was not defined: " + forwarderName);
 
                     forwarderRecords.AddRange(configForwarder.ForwarderRecords);
@@ -374,36 +378,31 @@ namespace AdvancedForwarding
 
                 _forwarderRecords = forwarderRecords;
 
-                _domainMap = jsonForwarding.ReadArrayAsMap("domains", delegate (JsonElement jsonDomain)
-                {
-                    return new Tuple<string, object>(jsonDomain.GetString().ToLowerInvariant(), null);
-                });
+                _domains = jsonForwarding.ReadArrayAsSet("domains") ?? [];
             }
 
             public Forwarding(IReadOnlyList<string> domains, NameServerAddress forwarder, bool dnssecValidation, ConfigProxyServer proxy)
-                : this(new DnsForwarderRecordData[] { GetForwarderRecord(forwarder, dnssecValidation, proxy) }, domains)
+                : this([GetForwarderRecord(forwarder, dnssecValidation, proxy)], domains)
             { }
 
             public Forwarding(IReadOnlyList<DnsForwarderRecordData> forwarderRecords, IReadOnlyList<string> domains)
             {
                 _forwarderRecords = forwarderRecords;
 
-                Dictionary<string, object> domainMap = new Dictionary<string, object>(domains.Count);
+                _domains = new HashSet<string>(domains.Count);
 
                 foreach (string domain in domains)
                 {
                     if (DnsClient.IsDomainNameValid(domain))
-                        domainMap.TryAdd(domain.ToLowerInvariant(), null);
+                        _domains.Add(domain.ToLowerInvariant());
                 }
-
-                _domainMap = domainMap;
             }
 
             #endregion
 
             #region static
 
-            public static bool TryGetForwarderRecords(string domain, IReadOnlyList<Forwarding> forwardings, out IReadOnlyList<DnsForwarderRecordData> forwarderRecords)
+            public static bool TryGetForwarderRecords(string domain, IReadOnlyList<Forwarding> forwardings, [MaybeNullWhen(false)] out IReadOnlyList<DnsForwarderRecordData> forwarderRecords)
             {
                 if (forwardings.Count == 1)
                 {
@@ -412,40 +411,22 @@ namespace AdvancedForwarding
                 }
                 else
                 {
-                    Dictionary<string, List<DnsForwarderRecordData>> fwdMap = new Dictionary<string, List<DnsForwarderRecordData>>(forwardings.Count);
+                    forwarderRecords = null;
+                    string? lastMatchedDomain = null;
 
                     foreach (Forwarding forwarding in forwardings)
                     {
-                        if (forwarding.TryGetForwarderRecords(domain, out IReadOnlyList<DnsForwarderRecordData> fwdRecords, out string matchedDomain))
+                        if (forwarding.TryGetForwarderRecords(domain, out IReadOnlyList<DnsForwarderRecordData>? fwdRecords, out string? matchedDomain))
                         {
-                            if (fwdMap.TryGetValue(matchedDomain, out List<DnsForwarderRecordData> fwdRecordsList))
+                            if ((lastMatchedDomain is null) || (matchedDomain.Length > lastMatchedDomain.Length) || ((matchedDomain.Length == lastMatchedDomain.Length) && lastMatchedDomain.StartsWith("*.")))
                             {
-                                fwdRecordsList.AddRange(fwdRecords);
-                            }
-                            else
-                            {
-                                fwdRecordsList = new List<DnsForwarderRecordData>(fwdRecords);
-                                fwdMap.Add(matchedDomain, fwdRecordsList);
+                                lastMatchedDomain = matchedDomain;
+                                forwarderRecords = fwdRecords;
                             }
                         }
                     }
 
-                    if (fwdMap.Count > 0)
-                    {
-                        forwarderRecords = null;
-                        string lastMatchedDomain = null;
-
-                        foreach (KeyValuePair<string, List<DnsForwarderRecordData>> fwdEntry in fwdMap)
-                        {
-                            if ((lastMatchedDomain is null) || (fwdEntry.Key.Length > lastMatchedDomain.Length) || ((fwdEntry.Key.Length == lastMatchedDomain.Length) && lastMatchedDomain.StartsWith("*.")))
-                            {
-                                lastMatchedDomain = fwdEntry.Key;
-                                forwarderRecords = fwdEntry.Value;
-                            }
-                        }
-
-                        return true;
-                    }
+                    return forwarderRecords is not null;
                 }
 
                 forwarderRecords = null;
@@ -478,7 +459,7 @@ namespace AdvancedForwarding
 
             #region private
 
-            private static string GetParentZone(string domain)
+            private static string? GetParentZone(string domain)
             {
                 int i = domain.IndexOf('.');
                 if (i > -1)
@@ -488,13 +469,13 @@ namespace AdvancedForwarding
                 return null;
             }
 
-            private bool IsDomainMatching(string domain, out string matchedDomain)
+            private bool IsDomainMatching(string domain, [MaybeNullWhen(false)] out string matchedDomain)
             {
-                string parent;
+                string? parent;
 
                 do
                 {
-                    if (_domainMap.TryGetValue(domain, out _))
+                    if (_domains.Contains(domain))
                     {
                         matchedDomain = domain;
                         return true;
@@ -503,7 +484,7 @@ namespace AdvancedForwarding
                     parent = GetParentZone(domain);
                     if (parent is null)
                     {
-                        if (_domainMap.TryGetValue("*", out _))
+                        if (_domains.Contains("*"))
                         {
                             matchedDomain = "*";
                             return true;
@@ -514,7 +495,7 @@ namespace AdvancedForwarding
 
                     domain = "*." + parent;
 
-                    if (_domainMap.TryGetValue(domain, out _))
+                    if (_domains.Contains(domain))
                     {
                         matchedDomain = domain;
                         return true;
@@ -528,7 +509,7 @@ namespace AdvancedForwarding
                 return false;
             }
 
-            private bool TryGetForwarderRecords(string domain, out IReadOnlyList<DnsForwarderRecordData> forwarderRecords, out string matchedDomain)
+            private bool TryGetForwarderRecords(string domain, [MaybeNullWhen(false)] out IReadOnlyList<DnsForwarderRecordData> forwarderRecords, [MaybeNullWhen(false)] out string matchedDomain)
             {
                 if (IsDomainMatching(domain, out matchedDomain))
                 {
@@ -544,7 +525,7 @@ namespace AdvancedForwarding
 
             #region public
 
-            public void UpdateForwarderRecords(bool dnssecValidation, ConfigProxyServer proxy)
+            public void UpdateForwarderRecords(bool dnssecValidation, ConfigProxyServer? proxy)
             {
                 _forwarderRecords = GetUpdatedForwarderRecords(_forwarderRecords, dnssecValidation, proxy);
             }
@@ -561,34 +542,34 @@ namespace AdvancedForwarding
             readonly IDnsServer _dnsServer;
 
             readonly string _name;
-            ConfigProxyServer _configProxyServer;
+            ConfigProxyServer? _configProxyServer;
             bool _dnssecValidation;
 
-            List<DnsForwarderRecordData> _defaultForwarderRecords;
-            List<Forwarding> _forwardings;
+            List<DnsForwarderRecordData>? _defaultForwarderRecords;
+            List<Forwarding>? _forwardings;
 
             readonly string _configFile;
             DateTime _configFileLastModified;
 
-            Timer _autoReloadTimer;
+            Timer? _autoReloadTimer;
             const int AUTO_RELOAD_TIMER_INTERVAL = 60000;
 
             #endregion
 
             #region constructor
 
-            public AdGuardUpstream(IDnsServer dnsServer, Dictionary<string, ConfigProxyServer> configProxyServers, JsonElement jsonAdguardUpstream)
+            public AdGuardUpstream(IDnsServer dnsServer, Dictionary<string, ConfigProxyServer>? configProxyServers, JsonElement jsonAdguardUpstream)
             {
                 _dnsServer = dnsServer;
 
-                _name = jsonAdguardUpstream.GetProperty("configFile").GetString();
+                _name = jsonAdguardUpstream.GetProperty("configFile").ToString();
 
                 _configFile = _name;
 
                 if (!Path.IsPathRooted(_configFile))
                     _configFile = Path.Combine(_dnsServer.ApplicationFolder, _configFile);
 
-                _autoReloadTimer = new Timer(delegate (object state)
+                _autoReloadTimer = new Timer(delegate (object? state)
                 {
                     try
                     {
@@ -643,7 +624,7 @@ namespace AdvancedForwarding
                     using (FileStream fS = new FileStream(_configFile, FileMode.Open, FileAccess.Read))
                     {
                         StreamReader sR = new StreamReader(fS, true);
-                        string line;
+                        string? line;
 
                         while (true)
                         {
@@ -717,7 +698,7 @@ namespace AdvancedForwarding
                 }
                 catch (Exception ex)
                 {
-                    _dnsServer.WriteLog("The app failed to read AdGuard Upstreams config file: " + _configFile + "\r\n" + ex.ToString());
+                    _dnsServer.WriteLog("The app failed to read AdGuard Upstreams config file: " + _configFile, ex);
                 }
             }
 
@@ -749,12 +730,12 @@ namespace AdvancedForwarding
 
             #region public
 
-            public void ReloadConfig(Dictionary<string, ConfigProxyServer> configProxyServers, JsonElement jsonAdguardUpstream)
+            public void ReloadConfig(Dictionary<string, ConfigProxyServer>? configProxyServers, JsonElement jsonAdguardUpstream)
             {
-                string proxyName = jsonAdguardUpstream.GetPropertyValue("proxy", null);
+                string? proxyName = jsonAdguardUpstream.GetPropertyValue("proxy", null);
                 _dnssecValidation = jsonAdguardUpstream.GetPropertyValue("dnssecValidation", true);
 
-                ConfigProxyServer configProxyServer = null;
+                ConfigProxyServer? configProxyServer = null;
 
                 if (!string.IsNullOrEmpty(proxyName) && ((configProxyServers is null) || !configProxyServers.TryGetValue(proxyName, out configProxyServer)))
                     throw new FormatException("Proxy server was not defined: " + proxyName);
@@ -765,19 +746,19 @@ namespace AdvancedForwarding
                 if (configFileLastModified > _configFileLastModified)
                 {
                     //reload complete config file
-                    _autoReloadTimer.Change(0, Timeout.Infinite);
+                    _autoReloadTimer?.Change(0, Timeout.Infinite);
                 }
                 else
                 {
                     //update only forwarder records
-                    _defaultForwarderRecords = GetUpdatedForwarderRecords(_defaultForwarderRecords, _dnssecValidation, _configProxyServer);
+                    _defaultForwarderRecords = GetUpdatedForwarderRecords(_defaultForwarderRecords ?? [], _dnssecValidation, _configProxyServer);
 
-                    foreach (Forwarding forwarding in _forwardings)
+                    foreach (Forwarding forwarding in _forwardings ?? [])
                         forwarding.UpdateForwarderRecords(_dnssecValidation, _configProxyServer);
                 }
             }
 
-            public bool TryGetForwarderRecords(string domain, out IReadOnlyList<DnsForwarderRecordData> forwarderRecords)
+            public bool TryGetForwarderRecords(string domain, [MaybeNullWhen(false)] out IReadOnlyList<DnsForwarderRecordData> forwarderRecords)
             {
                 if ((_forwardings is not null) && (_forwardings.Count > 0))
                 {
@@ -825,8 +806,8 @@ namespace AdvancedForwarding
             readonly DnsForwarderRecordProxyType _type;
             readonly string _proxyAddress;
             readonly ushort _proxyPort;
-            readonly string _proxyUsername;
-            readonly string _proxyPassword;
+            readonly string? _proxyUsername;
+            readonly string? _proxyPassword;
 
             #endregion
 
@@ -834,9 +815,9 @@ namespace AdvancedForwarding
 
             public ConfigProxyServer(JsonElement jsonProxy)
             {
-                _name = jsonProxy.GetProperty("name").GetString();
+                _name = jsonProxy.GetProperty("name").ToString();
                 _type = jsonProxy.GetPropertyEnumValue("type", DnsForwarderRecordProxyType.Http);
-                _proxyAddress = jsonProxy.GetProperty("proxyAddress").GetString();
+                _proxyAddress = jsonProxy.GetProperty("proxyAddress").ToString();
                 _proxyPort = jsonProxy.GetProperty("proxyPort").GetUInt16();
                 _proxyUsername = jsonProxy.GetPropertyValue("proxyUsername", null);
                 _proxyPassword = jsonProxy.GetPropertyValue("proxyPassword", null);
@@ -858,10 +839,10 @@ namespace AdvancedForwarding
             public ushort ProxyPort
             { get { return _proxyPort; } }
 
-            public string ProxyUsername
+            public string? ProxyUsername
             { get { return _proxyUsername; } }
 
-            public string ProxyPassword
+            public string? ProxyPassword
             { get { return _proxyPassword; } }
 
             #endregion
@@ -878,15 +859,15 @@ namespace AdvancedForwarding
 
             #region constructor
 
-            public ConfigForwarder(JsonElement jsonForwarder, Dictionary<string, ConfigProxyServer> configProxyServers)
+            public ConfigForwarder(JsonElement jsonForwarder, Dictionary<string, ConfigProxyServer>? configProxyServers)
             {
-                _name = jsonForwarder.GetProperty("name").GetString();
+                _name = jsonForwarder.GetProperty("name").ToString();
 
-                string proxyName = jsonForwarder.GetPropertyValue("proxy", null);
+                string? proxyName = jsonForwarder.GetPropertyValue("proxy", null);
                 bool dnssecValidation = jsonForwarder.GetPropertyValue("dnssecValidation", true);
                 DnsTransportProtocol forwarderProtocol = jsonForwarder.GetPropertyEnumValue("forwarderProtocol", DnsTransportProtocol.Udp);
 
-                ConfigProxyServer configProxyServer = null;
+                ConfigProxyServer? configProxyServer = null;
 
                 if (!string.IsNullOrEmpty(proxyName) && ((configProxyServers is null) || !configProxyServers.TryGetValue(proxyName, out configProxyServer)))
                     throw new FormatException("Proxy server was not defined: " + proxyName);
@@ -894,7 +875,7 @@ namespace AdvancedForwarding
                 _forwarderRecords = jsonForwarder.ReadArray("forwarderAddresses", delegate (string address)
                 {
                     return GetForwarderRecord(forwarderProtocol, address, dnssecValidation, configProxyServer);
-                });
+                }) ?? throw new FormatException("No 'forwarderAddresses' were configured.");
             }
 
             #endregion

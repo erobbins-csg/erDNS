@@ -1010,6 +1010,22 @@ namespace DnsServerCore.Dns.Zones
             return false;
         }
 
+        public override bool ContainsDNAMERecord()
+        {
+            if (!_entries.TryGetValue(DnsResourceRecordType.DNAME, out IReadOnlyList<DnsResourceRecord> records))
+                return false;
+
+            foreach (DnsResourceRecord record in records)
+            {
+                if (record.GetAuthGenericRecordInfo().Disabled)
+                    continue;
+
+                return true;
+            }
+
+            return false;
+        }
+
         #endregion
 
         #region properties

@@ -33,25 +33,6 @@ namespace DnsServerCore
         static readonly string[] HTTP_METHODS = new string[] { "GET", "POST" };
         static readonly char[] COMMA_SEPARATOR = new char[] { ',' };
 
-        public static IPEndPoint GetRemoteEndPoint(this HttpContext context)
-        {
-            try
-            {
-                IPAddress remoteIP = context.Connection.RemoteIpAddress;
-                if (remoteIP is null)
-                    return new IPEndPoint(IPAddress.Any, 0);
-
-                if (remoteIP.IsIPv4MappedToIPv6)
-                    remoteIP = remoteIP.MapToIPv4();
-
-                return new IPEndPoint(remoteIP, context.Connection.RemotePort);
-            }
-            catch
-            {
-                return new IPEndPoint(IPAddress.Any, 0);
-            }
-        }
-
         public static IPAddress GetLocalIpAddress(this HttpContext context)
         {
             try

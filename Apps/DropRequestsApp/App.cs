@@ -38,10 +38,10 @@ namespace DropRequests
 
         bool _enableBlocking;
         bool _dropMalformedRequests;
-        NetworkAddress[] _allowedNetworks;
-        NetworkAddress[] _blockedNetworks;
-        EndPoint[] _allowedLocalEndPoints;
-        BlockedQuestion[] _blockedQuestions;
+        NetworkAddress[] _allowedNetworks = [];
+        NetworkAddress[] _blockedNetworks = [];
+        EndPoint[] _allowedLocalEndPoints = [];
+        BlockedQuestion[] _blockedQuestions = [];
 
         #endregion
 
@@ -56,8 +56,11 @@ namespace DropRequests
 
         #region public
 
-        public async Task InitializeAsync(IDnsServer dnsServer, string config)
+        public async Task InitializeAsync(IDnsServer dnsServer, string? config)
         {
+            if (config is null)
+                throw new InvalidOperationException();
+
             using JsonDocument jsonDocument = JsonDocument.Parse(config, _jsonParseOptions);
             JsonElement jsonConfig = jsonDocument.RootElement;
 
@@ -68,22 +71,22 @@ namespace DropRequests
             else
                 _dropMalformedRequests = false;
 
-            if (jsonConfig.TryReadArray("allowedNetworks", NetworkAddress.Parse, out NetworkAddress[] allowedNetworks))
+            if (jsonConfig.TryReadArray("allowedNetworks", NetworkAddress.Parse, out NetworkAddress[]? allowedNetworks) && (allowedNetworks is not null))
                 _allowedNetworks = allowedNetworks;
             else
                 _allowedNetworks = [];
 
-            if (jsonConfig.TryReadArray("blockedNetworks", NetworkAddress.Parse, out NetworkAddress[] blockedNetworks))
+            if (jsonConfig.TryReadArray("blockedNetworks", NetworkAddress.Parse, out NetworkAddress[]? blockedNetworks) && (blockedNetworks is not null))
                 _blockedNetworks = blockedNetworks;
             else
                 _blockedNetworks = [];
 
-            if (jsonConfig.TryReadArray("allowedLocalEndPoints", EndPointExtensions.Parse, out EndPoint[] allowedLocalEndPoints))
+            if (jsonConfig.TryReadArray("allowedLocalEndPoints", EndPointExtensions.Parse, out EndPoint[]? allowedLocalEndPoints) && (allowedLocalEndPoints is not null))
                 _allowedLocalEndPoints = allowedLocalEndPoints;
             else
                 _allowedLocalEndPoints = [];
 
-            if (jsonConfig.TryReadArray("blockedQuestions", delegate (JsonElement blockedQuestion) { return new BlockedQuestion(blockedQuestion); }, out BlockedQuestion[] blockedQuestions))
+            if (jsonConfig.TryReadArray("blockedQuestions", delegate (JsonElement blockedQuestion) { return new BlockedQuestion(blockedQuestion); }, out BlockedQuestion[]? blockedQuestions) && (blockedQuestions is not null))
                 _blockedQuestions = blockedQuestions;
             else
                 _blockedQuestions = [];
@@ -178,12 +181,15 @@ namespace DropRequests
                 return Task.FromResult(DnsRequestControllerAction.DropSilently);
             }
 
-            DnsQuestionRecord requestQuestion = request.Question[0];
-
-            foreach (BlockedQuestion blockedQuestion in _blockedQuestions)
+            if (request.Question.Count > 0)
             {
-                if (blockedQuestion.Matches(requestQuestion))
-                    return Task.FromResult(DnsRequestControllerAction.DropSilently);
+                DnsQuestionRecord requestQuestion = request.Question[0];
+
+                foreach (BlockedQuestion blockedQuestion in _blockedQuestions)
+                {
+                    if (blockedQuestion.Matches(requestQuestion))
+                        return Task.FromResult(DnsRequestControllerAction.DropSilently);
+                }
             }
 
             return Task.FromResult(DnsRequestControllerAction.Allow);
@@ -202,7 +208,7 @@ namespace DropRequests
         {
             #region variables
 
-            readonly string _name;
+            readonly string? _name;
             readonly bool _blockZone;
             readonly DnsResourceRecordType _type;
 
@@ -213,7 +219,7 @@ namespace DropRequests
             public BlockedQuestion(JsonElement jsonQuestion)
             {
                 if (jsonQuestion.TryGetProperty("name", out JsonElement jsonName))
-                    _name = jsonName.GetString().TrimEnd('.');
+                    _name = jsonName.ToString().TrimEnd('.');
 
                 if (jsonQuestion.TryGetProperty("blockZone", out JsonElement jsonBlockZone))
                     _blockZone = jsonBlockZone.GetBoolean();

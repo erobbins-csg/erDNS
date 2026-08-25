@@ -220,7 +220,7 @@ namespace DnsServerCore.Cluster
             }
             catch (Exception ex)
             {
-                _dnsWebService.LogManager.Write("DNS Server encountered an error while loading the Cluster config file: " + configFile + "\r\n" + ex.ToString());
+                _dnsWebService.LogManager.Write("DNS Server encountered an error while loading the Cluster config file: " + configFile, ex);
             }
         }
 
@@ -346,7 +346,7 @@ namespace DnsServerCore.Cluster
                 }
                 catch (Exception ex)
                 {
-                    _dnsWebService.LogManager.Write("DNS Server encountered an error while deleting the Cluster config file: " + configFile + "\r\n" + ex.ToString());
+                    _dnsWebService.LogManager.Write("DNS Server encountered an error while deleting the Cluster config file: " + configFile, ex);
                 }
 
                 if (_pendingSave)
@@ -661,8 +661,8 @@ namespace DnsServerCore.Cluster
             _dnsWebService.DnsServer.ServerDomain = selfPrimaryNode.Name;
 
             //save all changes
-            _dnsWebService.DnsServer.SaveConfigFile();
-            _dnsWebService.AuthManager.SaveConfigFile();
+            _dnsWebService.DnsServer.SaveConfigFile(true);
+            _dnsWebService.AuthManager.SaveConfigFile(true);
             SaveConfigFile();
         }
 
@@ -1019,7 +1019,7 @@ namespace DnsServerCore.Cluster
                 AuthZoneInfo reverseZoneInfo = _dnsWebService.DnsServer.AuthZoneManager.FindAuthZoneInfo(ptrDomain);
                 if (reverseZoneInfo is not null)
                 {
-                    if (!reverseZoneInfo.Internal && ((reverseZoneInfo.Type == AuthZoneType.Primary) || (reverseZoneInfo.Type == AuthZoneType.Forwarder)))
+                    if ((reverseZoneInfo.Type == AuthZoneType.Primary) || (reverseZoneInfo.Type == AuthZoneType.Forwarder))
                         _dnsWebService.DnsServer.AuthZoneManager.DeleteRecord(reverseZoneInfo.Name, ptrDomain, DnsResourceRecordType.PTR, new DnsPTRRecordData(node.Name));
                 }
             }
@@ -1100,7 +1100,7 @@ namespace DnsServerCore.Cluster
                 AuthZoneInfo reverseZoneInfo = _dnsWebService.DnsServer.AuthZoneManager.FindAuthZoneInfo(ptrDomain);
                 if (reverseZoneInfo is not null)
                 {
-                    if (!reverseZoneInfo.Internal && ((reverseZoneInfo.Type == AuthZoneType.Primary) || (reverseZoneInfo.Type == AuthZoneType.Forwarder)))
+                    if ((reverseZoneInfo.Type == AuthZoneType.Primary) || (reverseZoneInfo.Type == AuthZoneType.Forwarder))
                     {
                         DnsResourceRecord ptrRecord = new DnsResourceRecord(ptrDomain, DnsResourceRecordType.PTR, DnsClass.IN, aTtl, new DnsPTRRecordData(node.Name));
 
@@ -1279,6 +1279,9 @@ namespace DnsServerCore.Cluster
             try
             {
                 IReadOnlyDictionary<int, ClusterNode> clusterNodes = _clusterNodes;
+                if ((clusterNodes is null) || (clusterNodes.Count < 1))
+                    return; //cluster not initialized
+
                 ClusterNode primaryNode = null;
 
                 foreach (KeyValuePair<int, ClusterNode> clusterNode in clusterNodes)
@@ -1327,13 +1330,16 @@ namespace DnsServerCore.Cluster
             if (!_dnsWebService.IsWebServiceTlsEnabled)
                 throw new InvalidOperationException();
 
+            if (IPAddress.TryParse(primaryNodeUrl.Host, out _))
+                throw new DnsServerException("Failed to join Cluster: the Primary Node URL must use the domain name of the Primary node and not its IP address.");
+
             if (primaryNodeIpAddresses is null)
             {
                 try
                 {
                     IReadOnlyList<IPAddress> ipAddresses = await DnsClient.ResolveIPAsync(_dnsWebService.DnsServer, primaryNodeUrl.Host, _dnsWebService.DnsServer.IPv6Mode, cancellationToken);
                     if (ipAddresses.Count < 1)
-                        throw new DnsServerException($"The domain name '{primaryNodeUrl.Host}' does not have an A/AAAA record configured.");
+                        throw new DnsServerException($"Failed to join Cluster: the domain name '{primaryNodeUrl.Host}' does not have an A/AAAA record configured.");
 
                     primaryNodeIpAddresses = ipAddresses;
                 }
@@ -1344,7 +1350,7 @@ namespace DnsServerCore.Cluster
             }
 
             //login to primary node API
-            using HttpApiClient primaryNodeApiClient = new HttpApiClient(primaryNodeUrl, _dnsWebService.DnsServer.Proxy, _dnsWebService.DnsServer.IPv6Mode, ignoreCertificateErrors, new InternalDnsClient(_dnsWebService.DnsServer, primaryNodeIpAddresses), TimeSpan.FromSeconds(300));
+            using HttpApiClient primaryNodeApiClient = new HttpApiClient(primaryNodeUrl, _dnsWebService.DnsServer.Proxy, _dnsWebService.DnsServer.IPv6Mode, ignoreCertificateErrors, new InternalDnsClient(_dnsWebService.DnsServer, primaryNodeIpAddresses));
 
             try
             {
@@ -1673,7 +1679,7 @@ namespace DnsServerCore.Cluster
             }
             catch (Exception ex)
             {
-                _dnsWebService.LogManager.Write("Failed to sync server configuration from the Primary node.\r\n" + ex.ToString());
+                _dnsWebService.LogManager.Write("Failed to sync server configuration from the Primary node.", ex);
             }
             finally
             {
@@ -1711,7 +1717,8 @@ namespace DnsServerCore.Cluster
 
                     await using (Stream stream = response.Item1)
                     {
-                        await stream.CopyToAsync(configZipStream, cancellationToken);
+                        //copy stream with idle timeout
+                        await stream.CopyToAsync(configZipStream, TimeSpan.FromSeconds(60), cancellationToken);
                     }
 
                     //dynamically load config
@@ -1784,7 +1791,7 @@ namespace DnsServerCore.Cluster
             }
             catch (Exception ex)
             {
-                _dnsWebService.LogManager.Write("DNS Server failed to update this Secondary node's details on the Primary node." + ex.ToString());
+                _dnsWebService.LogManager.Write("DNS Server failed to update this Secondary node's details on the Primary node.", ex);
             }
             finally
             {

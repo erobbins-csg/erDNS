@@ -126,10 +126,10 @@ function getAppRowHtml(app) {
     }
 
     tableHtmlRow += "</td>";
-    tableHtmlRow += "<td><button type=\"button\" class=\"btn btn-default\" style=\"font-size: 12px; padding: 2px 0px; width: 80px; margin-bottom: 6px; display: block;\" onclick=\"showAppConfigModal(this, '" + name + "');\" data-loading-text=\"Loading...\">Config</button>";
-    tableHtmlRow += "<button type=\"button\" class=\"btn btn-warning\" style=\"font-size: 12px; padding: 2px 0px; width: 80px; margin-bottom: 6px; display: block;\" onclick=\"showUpdateAppModal('" + name + "');\">Update</button>";
-    tableHtmlRow += "<button id=\"btnAppsStoreUpdate" + id + "\" type=\"button\" data-id=\"" + id + "\" class=\"btn btn-warning\" style=\"font-size: 12px; padding: 2px 0px; width: 80px; margin-bottom: 6px; " + (updateAvailable ? "" : "display: none;") + "\" onclick=\"updateStoreApp(this, '" + name + "', '" + updateUrl + "', false);\" data-loading-text=\"Updating...\">Store Update</button>";
-    tableHtmlRow += "<button type=\"button\" data-id=\"" + id + "\" class=\"btn btn-danger\" style=\"font-size: 12px; padding: 2px 0px; width: 80px; margin-bottom: 6px; display: block;\" onclick=\"uninstallApp(this, '" + name + "');\" data-loading-text=\"Uninstalling...\">Uninstall</button></td></tr>";
+    tableHtmlRow += "<td><button type=\"button\" class=\"btn btn-default\" style=\"font-size: 12px; padding: 2px 0px; width: 80px; margin-bottom: 6px; display: block;\" data-name=\"" + htmlEncode(name) + "\" onclick=\"showAppConfigModal(this, $(this).attr('data-name'));\" data-loading-text=\"Loading...\">Config</button>";
+    tableHtmlRow += "<button type=\"button\" class=\"btn btn-warning\" style=\"font-size: 12px; padding: 2px 0px; width: 80px; margin-bottom: 6px; display: block;\" data-name=\"" + htmlEncode(name) + "\" onclick=\"showUpdateAppModal($(this).attr('data-name'));\">Update</button>";
+    tableHtmlRow += "<button id=\"btnAppsStoreUpdate" + id + "\" type=\"button\" data-id=\"" + id + "\" class=\"btn btn-warning\" style=\"font-size: 12px; padding: 2px 0px; width: 80px; margin-bottom: 6px; " + (updateAvailable ? "" : "display: none;") + "\" data-name=\"" + htmlEncode(name) + "\" onclick=\"updateStoreApp(this, $(this).attr('data-name'), '" + updateUrl + "', false);\" data-loading-text=\"Updating...\">Store Update</button>";
+    tableHtmlRow += "<button type=\"button\" data-id=\"" + id + "\" class=\"btn btn-danger\" style=\"font-size: 12px; padding: 2px 0px; width: 80px; margin-bottom: 6px; display: block;\" data-name=\"" + htmlEncode(name) + "\" onclick=\"uninstallApp(this, $(this).attr('data-name'));\" data-loading-text=\"Uninstalling...\">Uninstall</button></td></tr>";
 
     return tableHtmlRow
 }

@@ -64,7 +64,7 @@ namespace DnsServerCore
                     foreach (JsonElement jsonStoreApp in jsonStoreAppsArray.EnumerateArray())
                     {
                         string name = jsonStoreApp.GetProperty("name").GetString();
-                        if (name.Equals(application.Name))
+                        if (name.Equals(application.Name, StringComparison.Ordinal))
                         {
                             string version = null;
                             string url = null;

@@ -41,14 +41,14 @@ namespace Failover
 
         readonly string _name;
         bool _enabled;
-        MailAddress[] _alertTo;
-        string _smtpServer;
+        MailAddress[]? _alertTo;
+        string? _smtpServer;
         int _smtpPort;
         bool _startTls;
         bool _smtpOverTls;
-        string _username;
-        string _password;
-        MailAddress _mailFrom;
+        string? _username;
+        string? _password;
+        MailAddress? _mailFrom;
 
         readonly SmtpClientEx _smtpClient;
 
@@ -123,7 +123,7 @@ namespace Failover
             }
             catch (Exception ex)
             {
-                _service.DnsServer.WriteLog("Failed to send email alert [" + _name + "].\r\n" + ex.ToString());
+                _service.DnsServer.WriteLog("Failed to send email alert [" + _name + "].", ex);
             }
         }
 
@@ -135,7 +135,7 @@ namespace Failover
         {
             _enabled = jsonEmailAlert.GetPropertyValue("enabled", false);
 
-            if (jsonEmailAlert.TryReadArray("alertTo", delegate (string emailAddress) { return new MailAddress(emailAddress); }, out MailAddress[] alertTo))
+            if (jsonEmailAlert.TryReadArray("alertTo", delegate (string emailAddress) { return new MailAddress(emailAddress); }, out MailAddress[]? alertTo))
                 _alertTo = alertTo;
             else
                 _alertTo = null;
@@ -147,12 +147,12 @@ namespace Failover
             _username = jsonEmailAlert.GetPropertyValue("username", null);
             _password = jsonEmailAlert.GetPropertyValue("password", null);
 
-            if (jsonEmailAlert.TryGetProperty("mailFrom", out JsonElement jsonMailFrom))
+            if (jsonEmailAlert.TryGetProperty("mailFrom", out JsonElement jsonMailFrom) && (jsonMailFrom.ValueKind == JsonValueKind.String))
             {
                 if (jsonEmailAlert.TryGetProperty("mailFromName", out JsonElement jsonMailFromName))
-                    _mailFrom = new MailAddress(jsonMailFrom.GetString(), jsonMailFromName.GetString(), Encoding.UTF8);
+                    _mailFrom = new MailAddress(jsonMailFrom.GetString()!, jsonMailFromName.GetString(), Encoding.UTF8);
                 else
-                    _mailFrom = new MailAddress(jsonMailFrom.GetString());
+                    _mailFrom = new MailAddress(jsonMailFrom.GetString()!);
             }
             else
             {
@@ -348,10 +348,10 @@ DNS Failover App
         public bool Enabled
         { get { return _enabled; } }
 
-        public MailAddress[] AlertTo
+        public MailAddress[]? AlertTo
         { get { return _alertTo; } }
 
-        public string SmtpServer
+        public string? SmtpServer
         { get { return _smtpServer; } }
 
         public int SmtpPort
@@ -363,13 +363,13 @@ DNS Failover App
         public bool SmtpOverTls
         { get { return _smtpOverTls; } }
 
-        public string Username
+        public string? Username
         { get { return _username; } }
 
-        public string Password
+        public string? Password
         { get { return _password; } }
 
-        public MailAddress MailFrom
+        public MailAddress? MailFrom
         { get { return _mailFrom; } }
 
         #endregion

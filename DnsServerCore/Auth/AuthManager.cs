@@ -182,7 +182,11 @@ namespace DnsServerCore.Auth
                     adminUser.AddToGroup(GetGroup(Group.ADMINISTRATORS));
 
                     _log.Write("DNS Server has reset the password for user: admin");
-                    SaveConfigFileInternal();
+
+                    lock (_saveLock)
+                    {
+                        SaveConfigFileInternal();
+                    }
 
                     try
                     {
@@ -259,11 +263,14 @@ namespace DnsServerCore.Auth
                     SsoGroupMap = groupMap;
                 }
 
-                SaveConfigFileInternal();
+                lock (_saveLock)
+                {
+                    SaveConfigFileInternal();
+                }
             }
             catch (Exception ex)
             {
-                _log.Write("DNS Server encountered an error while loading auth config file: " + configFile + "\r\n" + ex.ToString());
+                _log.Write("DNS Server encountered an error while loading auth config file: " + configFile, ex);
                 _log.Write("Note: You may try deleting the auth config file to fix this issue. However, you will lose auth settings but, rest of the DNS settings and zone data wont be affected.");
                 throw;
             }
@@ -355,10 +362,17 @@ namespace DnsServerCore.Auth
             _log.Write("DNS Server auth config file was saved: " + configFile);
         }
 
-        public void SaveConfigFile()
+        public void SaveConfigFile(bool immediately = false)
         {
             lock (_saveLock)
             {
+                if (immediately)
+                {
+                    SaveConfigFileInternal();
+                    _pendingSave = false;
+                    return;
+                }
+
                 if (_pendingSave)
                     return;
 
@@ -714,9 +728,9 @@ namespace DnsServerCore.Auth
             SetPermission(PermissionSection.Cache, dnsAdminGroup, PermissionFlag.ViewModifyDelete);
             SetPermission(PermissionSection.Allowed, dnsAdminGroup, PermissionFlag.ViewModifyDelete);
             SetPermission(PermissionSection.Blocked, dnsAdminGroup, PermissionFlag.ViewModifyDelete);
-            SetPermission(PermissionSection.Apps, dnsAdminGroup, PermissionFlag.ViewModifyDelete);
-            SetPermission(PermissionSection.DnsClient, dnsAdminGroup, PermissionFlag.ViewModifyDelete);
-            SetPermission(PermissionSection.Settings, dnsAdminGroup, PermissionFlag.ViewModifyDelete);
+            SetPermission(PermissionSection.Apps, dnsAdminGroup, PermissionFlag.ViewModify);
+            SetPermission(PermissionSection.DnsClient, dnsAdminGroup, PermissionFlag.View);
+            SetPermission(PermissionSection.Settings, dnsAdminGroup, PermissionFlag.ViewModify);
 
             SetPermission(PermissionSection.DhcpServer, dhcpAdminGroup, PermissionFlag.ViewModifyDelete);
 
@@ -949,6 +963,13 @@ namespace DnsServerCore.Auth
             }
 
             throw new DnsWebServiceException("User already exists: " + username);
+        }
+
+        public bool HasDefaultCredentials()
+        {
+            User user = GetUser("admin");
+
+            return (user is not null) && user.PasswordHash.Equals(user.GetPasswordHashFor("admin"), StringComparison.Ordinal);
         }
 
         public void ChangeUsername(User user, string newUsername)

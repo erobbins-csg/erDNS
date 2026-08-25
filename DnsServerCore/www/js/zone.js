@@ -165,6 +165,14 @@ $(function () {
         $("#txtAddZoneForwarderProxyPassword").prop("disabled", disabled);
     });
 
+    $("#chkZonesTableCheckAll").on("click", function () {
+        var checked = $("#chkZonesTableCheckAll").prop("checked");
+        var checkboxes = $("#tableZonesBody").find("input:checkbox");
+
+        for (var i = 0; i < checkboxes.length; i++)
+            $(checkboxes[i]).prop("checked", checked);
+    });
+
     $("#txtEditZoneFilterName").on("input", function () {
         editZoneFilteredRecords = null; //to evaluate filters again
     });
@@ -652,6 +660,9 @@ function refreshZones(checkDisplay, pageNumber) {
             return;
     }
 
+    var filterName = $("#txtZonesFilterName").val();
+    var filterType = $("#optZonesFilterType").val();
+
     if (pageNumber == null) {
         pageNumber = $("#txtZonesPageNumber").val();
         if (pageNumber == "")
@@ -672,7 +683,7 @@ function refreshZones(checkDisplay, pageNumber) {
     divViewZonesLoader.show();
 
     HTTPRequest({
-        url: "api/zones/list?pageNumber=" + pageNumber + "&zonesPerPage=" + zonesPerPage + "&node=" + encodeURIComponent(node),
+        url: "api/zones/list?filterName=" + encodeURIComponent(filterName) + "&filterType=" + encodeURIComponent(filterType) + "&pageNumber=" + pageNumber + "&zonesPerPage=" + zonesPerPage + "&node=" + encodeURIComponent(node),
         token: sessionData.token,
         success: function (responseJSON) {
             var zones = responseJSON.response.zones;
@@ -688,23 +699,19 @@ function refreshZones(checkDisplay, pageNumber) {
                     name = ".";
 
                 var type;
-                if (zones[i].internal) {
-                    type = "<span class=\"label label-default\">Internal</span>";
-                }
-                else {
-                    switch (zones[i].type) {
-                        case "SecondaryForwarder":
-                            type = "<span class=\"label label-primary\">Secondary Forwarder</span>";
-                            break;
 
-                        case "SecondaryCatalog":
-                            type = "<span class=\"label label-primary\">Secondary Catalog</span>";
-                            break;
+                switch (zones[i].type) {
+                    case "SecondaryForwarder":
+                        type = "<span class=\"label label-primary\">Secondary Forwarder</span>";
+                        break;
 
-                        default:
-                            type = "<span class=\"label label-primary\">" + zones[i].type + "</span>";
-                            break;
-                    }
+                    case "SecondaryCatalog":
+                        type = "<span class=\"label label-primary\">Secondary Catalog</span>";
+                        break;
+
+                    default:
+                        type = "<span class=\"label label-primary\">" + zones[i].type + "</span>";
+                        break;
                 }
 
                 var soaSerial = zones[i].soaSerial;
@@ -751,8 +758,6 @@ function refreshZones(checkDisplay, pageNumber) {
                 else
                     lastModified = moment(lastModified).local().format("YYYY-MM-DD HH:mm");
 
-                var isReadOnlyZone = zones[i].internal;
-
                 var showResyncMenu;
 
                 switch (zones[i].type) {
@@ -772,9 +777,6 @@ function refreshZones(checkDisplay, pageNumber) {
 
                 switch (zones[i].type) {
                     case "Primary":
-                        hideOptionsMenu = zones[i].internal;
-                        break;
-
                     case "Secondary":
                     case "SecondaryForwarder":
                     case "SecondaryCatalog":
@@ -807,7 +809,8 @@ function refreshZones(checkDisplay, pageNumber) {
                     }
                 }
 
-                tableHtmlRows += "<tr id=\"trZone" + id + "\"><td>" + (firstRowNumber + i) + "</td>";
+                tableHtmlRows += "<tr id=\"trZone" + id + "\"><td><input type=\"checkbox\" data-zone=\"" + htmlEncode(name) + "\"" + (zones[i].nameIdn == null ? "" : " data-zone-idn=\"" + htmlEncode(zones[i].nameIdn) + "\"") + " /></td>";
+                tableHtmlRows += "<td>" + (firstRowNumber + i) + "</td>";
 
                 if (zones[i].nameIdn == null)
                     tableHtmlRows += "<td style=\"word-break: break-word; max-width: 390px;\"><a href=\"#\" style=\"font-weight: bold;\" onclick=\"showEditZone('" + name + "'); return false;\">" + htmlEncode(name === "." ? "<root>" : name) + "</a>" + nameTags + "</td>";
@@ -822,12 +825,10 @@ function refreshZones(checkDisplay, pageNumber) {
                 tableHtmlRows += "<td>" + lastModified + "</td>";
 
                 tableHtmlRows += "<td align=\"right\"><div class=\"dropdown\"><a href=\"#\" id=\"btnZoneRowOption" + id + "\" class=\"dropdown-toggle\" data-toggle=\"dropdown\" aria-haspopup=\"true\" aria-expanded=\"true\"><span class=\"glyphicon glyphicon-option-vertical\" aria-hidden=\"true\"></span></a><ul class=\"dropdown-menu dropdown-menu-right\">";
-                tableHtmlRows += "<li><a href=\"#\" onclick=\"showEditZone('" + name + "'); return false;\">" + (isReadOnlyZone ? "View" : "Edit") + " Zone</a></li>";
+                tableHtmlRows += "<li><a href=\"#\" onclick=\"showEditZone('" + name + "'); return false;\">Edit Zone</a></li>";
 
-                if (!zones[i].internal) {
-                    tableHtmlRows += "<li id=\"mnuEnableZone" + id + "\"" + (zones[i].disabled ? "" : " style=\"display: none;\"") + "><a href=\"#\" data-id=\"" + id + "\" data-zone=\"" + htmlEncode(name) + "\" onclick=\"enableZoneMenu(this); return false;\">Enable</a></li>";
-                    tableHtmlRows += "<li id=\"mnuDisableZone" + id + "\"" + (!zones[i].disabled ? "" : " style=\"display: none;\"") + "><a href=\"#\" data-id=\"" + id + "\" data-zone=\"" + htmlEncode(name) + "\" onclick=\"disableZoneMenu(this); return false;\">Disable</a></li>";
-                }
+                tableHtmlRows += "<li id=\"mnuEnableZone" + id + "\"" + (zones[i].disabled ? "" : " style=\"display: none;\"") + "><a href=\"#\" data-id=\"" + id + "\" data-zone=\"" + htmlEncode(name) + "\" onclick=\"enableZoneMenu(this); return false;\">Enable</a></li>";
+                tableHtmlRows += "<li id=\"mnuDisableZone" + id + "\"" + (!zones[i].disabled ? "" : " style=\"display: none;\"") + "><a href=\"#\" data-id=\"" + id + "\" data-zone=\"" + htmlEncode(name) + "\" onclick=\"disableZoneMenu(this); return false;\">Disable</a></li>";
 
                 if (showResyncMenu) {
                     tableHtmlRows += "<li><a href=\"#\" data-id=\"" + id + "\" data-zone=\"" + htmlEncode(name) + "\" data-zone-type=\"" + zones[i].type + "\" onclick=\"resyncZoneMenu(this); return false;\">Resync</a></li>";
@@ -868,21 +869,20 @@ function refreshZones(checkDisplay, pageNumber) {
                         break;
                 }
 
-                if (!zones[i].internal) {
-                    tableHtmlRows += "<li><a href=\"#\" onclick=\"showZonePermissionsModal('" + name + "'); return false;\">Permissions</a></li>";
-                }
+                tableHtmlRows += "<li><a href=\"#\" onclick=\"showZonePermissionsModal('" + name + "'); return false;\">Permissions</a></li>";
 
                 if (!hideOptionsMenu) {
                     tableHtmlRows += "<li><a href=\"#\" onclick=\"$('#btnSaveZoneOptions').attr('data-zones-row-id', " + id + "); showZoneOptionsModal('" + name + "'); return false;\">Zone Options</a></li>";
                 }
 
-                if (!zones[i].internal) {
-                    tableHtmlRows += "<li role=\"separator\" class=\"divider\"></li>";
-                    tableHtmlRows += "<li><a href=\"#\" data-id=\"" + id + "\" data-zone=\"" + htmlEncode(name) + "\" onclick=\"deleteZoneMenu(this); return false;\">Delete Zone</a></li>";
-                }
+                tableHtmlRows += "<li role=\"separator\" class=\"divider\"></li>";
+                tableHtmlRows += "<li><a href=\"#\" data-id=\"" + id + "\" data-zone=\"" + htmlEncode(name) + "\" onclick=\"deleteZoneMenu(this); return false;\">Delete Zone</a></li>";
 
                 tableHtmlRows += "</ul></div></td></tr>";
             }
+
+            if (responseJSON.response.zones.length == 0)
+                tableHtmlRows = "<tr><td colspan=\"9\" align=\"center\">No Zone Found</td></tr>";
 
             var paginationHtml = "";
 
@@ -925,6 +925,7 @@ function refreshZones(checkDisplay, pageNumber) {
                 statusHtml = "0 zones";
 
             $("#txtZonesPageNumber").val(responseJSON.response.pageNumber);
+            $("#chkZonesTableCheckAll").prop("checked", false);
             $("#tableZonesBody").html(tableHtmlRows);
 
             $("#tableZonesTopStatus").html(statusHtml);
@@ -935,6 +936,8 @@ function refreshZones(checkDisplay, pageNumber) {
 
             divViewZonesLoader.hide();
             divViewZones.show();
+
+            $("#txtZonesFilterName").focus();
         },
         error: function () {
             divViewZonesLoader.hide();
@@ -1079,6 +1082,73 @@ function disableZone(objBtn) {
             $("#titleEditZoneStatus").html("Disabled");
 
             showAlert("success", "Zone Disabled!", "Zone '" + zone + "' was disabled successfully.");
+        },
+        error: function () {
+            btn.button("reset");
+        },
+        invalidToken: function () {
+            btn.button("reset");
+            showPageLogin();
+        }
+    });
+}
+
+function deleteSelectedZones(objBtn) {
+    var checkboxes = $("#tableZonesBody").find("input:checkbox");
+    var zones;
+    var zonesList;
+
+    for (var i = 0; i < checkboxes.length; i++) {
+        var checkbox = $(checkboxes[i]);
+
+        if (checkbox.prop("checked")) {
+            var zone = checkbox.attr("data-zone");
+            var zoneIdn = checkbox.attr("data-zone-idn");
+
+            if (zones == null)
+                zones = zone;
+            else
+                zones += "," + zone;
+
+            var zoneName;
+
+            if (zoneIdn == null)
+                zoneName = zone;
+            else
+                zoneName = zoneIdn + " (" + zone + ")";
+
+            if (zonesList == null)
+                zonesList = zoneName;
+            else
+                zonesList += "\n" + zoneName;
+        }
+    }
+
+    if (zones == null) {
+        alert("Please select one or more zones to delete.");
+        return;
+    }
+
+    if (!confirm("Are you sure you want to permanently delete the following zones and all of their records?\n\n" + zonesList))
+        return;
+
+    var node = $("#optZonesClusterNode").val();
+
+    var btn = $(objBtn);
+    btn.button("loading");
+
+    HTTPRequest({
+        url: "api/zones/delete?zones=" + encodeURIComponent(zones) + "&node=" + encodeURIComponent(node),
+        token: sessionData.token,
+        success: function (responseJSON) {
+            btn.button("reset");
+            refreshZones();
+
+            var failCount = Object.keys(responseJSON.response.failed).length;
+            if (failCount == 0)
+                showAlert("success", "Zones Deleted!", "All selected zones were deleted successfully.");
+            else
+                showAlert("warning", "Failed To Deleted!", "A total of " + failCount + " zone(s) of the selected " + (responseJSON.response.deleted.length + failCount) + " zone(s) failed to delete. Please check error logs for more details.");
         },
         error: function () {
             btn.button("reset");
@@ -3043,12 +3113,6 @@ function showEditZone(zone, showPageNumber, zoneFilterName, zoneFilterType) {
             if (zone === "")
                 zone = ".";
 
-            var zoneType;
-            if (responseJSON.response.zone.internal)
-                zoneType = "Internal";
-            else
-                zoneType = responseJSON.response.zone.type;
-
             switch (responseJSON.response.zone.dnssecStatus) {
                 case "SignedWithNSEC":
                 case "SignedWithNSEC3":
@@ -3087,7 +3151,7 @@ function showEditZone(zone, showPageNumber, zoneFilterName, zoneFilterType) {
                 $("#titleEditZoneCatalog").show();
             }
             else {
-                switch (zoneType) {
+                switch (responseJSON.response.zone.type) {
                     case "Catalog":
                     case "SecondaryCatalog":
                         $("#titleEditZoneCatalog").attr("class", "label label-info");
@@ -3108,7 +3172,7 @@ function showEditZone(zone, showPageNumber, zoneFilterName, zoneFilterType) {
             else
                 expiry = "Expiry: " + moment(expiry).local().format("YYYY-MM-DD HH:mm:ss");
 
-            switch (zoneType) {
+            switch (responseJSON.response.zone.type) {
                 case "SecondaryForwarder":
                     $("#titleEditZoneType").html("Secondary Forwarder");
                     break;
@@ -3118,17 +3182,14 @@ function showEditZone(zone, showPageNumber, zoneFilterName, zoneFilterType) {
                     break;
 
                 default:
-                    $("#titleEditZoneType").html(zoneType);
+                    $("#titleEditZoneType").html(responseJSON.response.zone.type);
                     break;
             }
 
             $("#titleEditZoneStatus").html(status);
             $("#titleEditZoneExpiry").html(expiry);
 
-            if (responseJSON.response.zone.internal)
-                $("#titleEditZoneType").attr("class", "label label-default");
-            else
-                $("#titleEditZoneType").attr("class", "label label-primary");
+            $("#titleEditZoneType").attr("class", "label label-primary");
 
             switch (status) {
                 case "Disabled":
@@ -3150,8 +3211,7 @@ function showEditZone(zone, showPageNumber, zoneFilterName, zoneFilterType) {
                     break;
             }
 
-            switch (zoneType) {
-                case "Internal":
+            switch (responseJSON.response.zone.type) {
                 case "Secondary":
                 case "SecondaryForwarder":
                 case "SecondaryCatalog":
@@ -3195,12 +3255,7 @@ function showEditZone(zone, showPageNumber, zoneFilterName, zoneFilterType) {
                     break;
             }
 
-            if (responseJSON.response.zone.internal) {
-                $("#btnEnableZoneEditZone").hide();
-                $("#btnDisableZoneEditZone").hide();
-                $("#btnEditZoneDeleteZone").hide();
-            }
-            else if (responseJSON.response.zone.disabled) {
+            if (responseJSON.response.zone.disabled) {
                 $("#btnEnableZoneEditZone").show();
                 $("#btnDisableZoneEditZone").hide();
                 $("#btnEditZoneDeleteZone").show();
@@ -3211,7 +3266,7 @@ function showEditZone(zone, showPageNumber, zoneFilterName, zoneFilterType) {
                 $("#btnEditZoneDeleteZone").show();
             }
 
-            switch (zoneType) {
+            switch (responseJSON.response.zone.type) {
                 case "Secondary":
                 case "SecondaryForwarder":
                 case "SecondaryCatalog":
@@ -3224,7 +3279,7 @@ function showEditZone(zone, showPageNumber, zoneFilterName, zoneFilterType) {
                     break;
             }
 
-            switch (zoneType) {
+            switch (responseJSON.response.zone.type) {
                 case "Primary":
                 case "Secondary":
                 case "SecondaryForwarder":
@@ -3240,7 +3295,7 @@ function showEditZone(zone, showPageNumber, zoneFilterName, zoneFilterType) {
                     break;
             }
 
-            switch (zoneType) {
+            switch (responseJSON.response.zone.type) {
                 case "Primary":
                 case "Forwarder":
                     $("#lnkImportZone").show();
@@ -3261,7 +3316,7 @@ function showEditZone(zone, showPageNumber, zoneFilterName, zoneFilterType) {
                     break;
             }
 
-            switch (zoneType) {
+            switch (responseJSON.response.zone.type) {
                 case "Primary":
                 case "Secondary":
                 case "SecondaryForwarder":
@@ -3275,7 +3330,7 @@ function showEditZone(zone, showPageNumber, zoneFilterName, zoneFilterType) {
                     break;
             }
 
-            switch (zoneType) {
+            switch (responseJSON.response.zone.type) {
                 case "Primary":
                 case "Forwarder":
                     $("#lnkCloneZone").show();
@@ -3286,7 +3341,7 @@ function showEditZone(zone, showPageNumber, zoneFilterName, zoneFilterType) {
                     break;
             }
 
-            switch (zoneType) {
+            switch (responseJSON.response.zone.type) {
                 case "Primary":
                 case "Secondary":
                 case "SecondaryForwarder":
@@ -3302,7 +3357,7 @@ function showEditZone(zone, showPageNumber, zoneFilterName, zoneFilterType) {
                     break;
             }
 
-            switch (zoneType) {
+            switch (responseJSON.response.zone.type) {
                 case "Primary":
                 case "Secondary":
                 case "SecondaryForwarder":
@@ -3320,7 +3375,7 @@ function showEditZone(zone, showPageNumber, zoneFilterName, zoneFilterType) {
 
             var zoneHideDnssecRecords = (localStorage.getItem("zoneHideDnssecRecords") == "true");
 
-            switch (zoneType) {
+            switch (responseJSON.response.zone.type) {
                 case "Primary":
                     $("#divZoneDnssecOptions").show();
 
@@ -3420,7 +3475,7 @@ function showEditZone(zone, showPageNumber, zoneFilterName, zoneFilterType) {
                 $("#titleEditZone").text(responseJSON.response.zone.nameIdn + " (" + zone + ")");
 
             $("#titleEditZone").attr("data-zone", zone);
-            $("#titleEditZone").attr("data-zone-type", zoneType);
+            $("#titleEditZone").attr("data-zone-type", responseJSON.response.zone.type);
 
             $("#txtEditZoneFilterName").val(zoneFilterName);
             $("#txtEditZoneFilterType").val(zoneFilterType);
@@ -3739,7 +3794,16 @@ function getZoneRecordRowHtml(index, zone, zoneType, record) {
 
             tableHtmlRow += "<br />";
 
-            additionalDataAttributes = "data-record-text=\"" + htmlEncode(text) + "\" " +
+            var b64CharacterStrings;
+
+            for (var i = 0; i < record.rData.characterStringsBase64.length; i++) {
+                if (b64CharacterStrings == null)
+                    b64CharacterStrings = record.rData.characterStringsBase64[i];
+                else
+                    b64CharacterStrings += "," + record.rData.characterStringsBase64[i];
+            }
+
+            additionalDataAttributes = "data-record-text=\"" + htmlEncode(text) + "\" data-record-character-strings-base64=\"" + htmlEncode(b64CharacterStrings) + "\" " +
                 "data-record-split-text=\"" + htmlEncode(record.rData.splitText) + "\" ";
             break;
 
@@ -4132,7 +4196,6 @@ function getZoneRecordRowHtml(index, zone, zoneType, record) {
     var disableEnableDisableDeleteButtons = false;
 
     switch (zoneType) {
-        case "Internal":
         case "Secondary":
         case "SecondaryForwarder":
         case "SecondaryCatalog":
@@ -4668,7 +4731,7 @@ function addRecord() {
     var comments = $("#txtAddEditRecordComments").val();
     var expiryTtl = $("#txtAddEditRecordExpiryTtl").val();
 
-    var apiUrl = "";
+    var formData = "";
 
     switch (type) {
         case "A":
@@ -4682,7 +4745,7 @@ function addRecord() {
 
             var updateSvcbHints = zoneHasSvcbAutoHint(type == "A", type == "AAAA");
 
-            apiUrl += "&ipAddress=" + encodeURIComponent(ipAddress) + "&ptr=" + $("#chkAddEditRecordDataPtr").prop('checked') + "&createPtrZone=" + $("#chkAddEditRecordDataCreatePtrZone").prop('checked') + "&updateSvcbHints=" + updateSvcbHints;
+            formData += "&ipAddress=" + encodeURIComponent(ipAddress) + "&ptr=" + $("#chkAddEditRecordDataPtr").prop('checked') + "&createPtrZone=" + $("#chkAddEditRecordDataCreatePtrZone").prop('checked') + "&updateSvcbHints=" + updateSvcbHints;
             break;
 
         case "NS":
@@ -4695,7 +4758,7 @@ function addRecord() {
 
             var glue = cleanTextList($("#txtAddEditRecordDataNsGlue").val());
 
-            apiUrl += "&nameServer=" + encodeURIComponent(nameServer) + "&glue=" + encodeURIComponent(glue);
+            formData += "&nameServer=" + encodeURIComponent(nameServer) + "&glue=" + encodeURIComponent(glue);
             break;
 
         case "CNAME":
@@ -4713,7 +4776,7 @@ function addRecord() {
                 return;
             }
 
-            apiUrl += "&cname=" + encodeURIComponent(cname);
+            formData += "&cname=" + encodeURIComponent(cname);
             break;
 
         case "PTR":
@@ -4724,7 +4787,7 @@ function addRecord() {
                 return;
             }
 
-            apiUrl += "&ptrName=" + encodeURIComponent(ptrName);
+            formData += "&ptrName=" + encodeURIComponent(ptrName);
             break;
 
         case "MX":
@@ -4739,7 +4802,7 @@ function addRecord() {
                 return;
             }
 
-            apiUrl += "&preference=" + preference + "&exchange=" + encodeURIComponent(exchange);
+            formData += "&preference=" + preference + "&exchange=" + encodeURIComponent(exchange);
             break;
 
         case "TXT":
@@ -4752,7 +4815,7 @@ function addRecord() {
 
             var splitText = $("#chkAddEditRecordDataTxtSplitText").prop("checked");
 
-            apiUrl += "&text=" + encodeURIComponent(text) + "&splitText=" + splitText;
+            formData += "&text=" + encodeURIComponent(text) + "&splitText=" + splitText;
             break;
 
         case "RP":
@@ -4764,7 +4827,7 @@ function addRecord() {
             if (txtDomain === "")
                 txtDomain = ".";
 
-            apiUrl += "&mailbox=" + encodeURIComponent(mailbox) + "&txtDomain=" + encodeURIComponent(txtDomain);
+            formData += "&mailbox=" + encodeURIComponent(mailbox) + "&txtDomain=" + encodeURIComponent(txtDomain);
             break;
 
         case "SRV":
@@ -4802,7 +4865,7 @@ function addRecord() {
                 return;
             }
 
-            apiUrl += "&priority=" + priority + "&weight=" + weight + "&port=" + port + "&target=" + encodeURIComponent(target);
+            formData += "&priority=" + priority + "&weight=" + weight + "&port=" + port + "&target=" + encodeURIComponent(target);
             break;
 
         case "NAPTR":
@@ -4825,7 +4888,7 @@ function addRecord() {
             var regexp = $("#txtAddEditRecordDataNaptrRegExp").val();
             var replacement = $("#txtAddEditRecordDataNaptrReplacement").val();
 
-            apiUrl += "&naptrOrder=" + order + "&naptrPreference=" + preference + "&naptrFlags=" + encodeURIComponent(flags) + "&naptrServices=" + encodeURIComponent(services) + "&naptrRegexp=" + encodeURIComponent(regexp) + "&naptrReplacement=" + encodeURIComponent(replacement);
+            formData += "&naptrOrder=" + order + "&naptrPreference=" + preference + "&naptrFlags=" + encodeURIComponent(flags) + "&naptrServices=" + encodeURIComponent(services) + "&naptrRegexp=" + encodeURIComponent(regexp) + "&naptrReplacement=" + encodeURIComponent(replacement);
             break;
 
         case "DNAME":
@@ -4836,7 +4899,7 @@ function addRecord() {
                 return;
             }
 
-            apiUrl += "&dname=" + encodeURIComponent(dname);
+            formData += "&dname=" + encodeURIComponent(dname);
             break;
 
         case "DS":
@@ -4875,7 +4938,7 @@ function addRecord() {
                 return;
             }
 
-            apiUrl += "&keyTag=" + keyTag + "&algorithm=" + algorithm + "&digestType=" + digestType + "&digest=" + encodeURIComponent(digest);
+            formData += "&keyTag=" + keyTag + "&algorithm=" + algorithm + "&digestType=" + digestType + "&digest=" + encodeURIComponent(digest);
             break;
 
         case "SSHFP":
@@ -4900,7 +4963,7 @@ function addRecord() {
                 return;
             }
 
-            apiUrl += "&sshfpAlgorithm=" + sshfpAlgorithm + "&sshfpFingerprintType=" + sshfpFingerprintType + "&sshfpFingerprint=" + encodeURIComponent(sshfpFingerprint);
+            formData += "&sshfpAlgorithm=" + sshfpAlgorithm + "&sshfpFingerprintType=" + sshfpFingerprintType + "&sshfpFingerprint=" + encodeURIComponent(sshfpFingerprint);
             break;
 
         case "TLSA":
@@ -4938,7 +5001,7 @@ function addRecord() {
                 return;
             }
 
-            apiUrl += "&tlsaCertificateUsage=" + tlsaCertificateUsage + "&tlsaSelector=" + tlsaSelector + "&tlsaMatchingType=" + tlsaMatchingType + "&tlsaCertificateAssociationData=" + encodeURIComponent(tlsaCertificateAssociationData);
+            formData += "&tlsaCertificateUsage=" + tlsaCertificateUsage + "&tlsaSelector=" + tlsaSelector + "&tlsaMatchingType=" + tlsaMatchingType + "&tlsaCertificateAssociationData=" + encodeURIComponent(tlsaCertificateAssociationData);
             break;
 
         case "SVCB":
@@ -4967,7 +5030,7 @@ function addRecord() {
             var autoIpv4Hint = $("#chkAddEditRecordDataSvcbAutoIpv4Hint").prop("checked");
             var autoIpv6Hint = $("#chkAddEditRecordDataSvcbAutoIpv6Hint").prop("checked");
 
-            apiUrl += "&svcPriority=" + svcPriority + "&svcTargetName=" + encodeURIComponent(svcTargetName) + "&svcParams=" + encodeURIComponent(svcParams) + "&autoIpv4Hint=" + autoIpv4Hint + "&autoIpv6Hint=" + autoIpv6Hint;
+            formData += "&svcPriority=" + svcPriority + "&svcTargetName=" + encodeURIComponent(svcTargetName) + "&svcParams=" + encodeURIComponent(svcParams) + "&autoIpv4Hint=" + autoIpv4Hint + "&autoIpv6Hint=" + autoIpv6Hint;
             break;
 
         case "URI":
@@ -4992,7 +5055,7 @@ function addRecord() {
                 return;
             }
 
-            apiUrl += "&uriPriority=" + uriPriority + "&uriWeight=" + uriWeight + "&uri=" + encodeURIComponent(uri);
+            formData += "&uriPriority=" + uriPriority + "&uriWeight=" + uriWeight + "&uri=" + encodeURIComponent(uri);
             break;
 
         case "CAA":
@@ -5011,7 +5074,7 @@ function addRecord() {
                 return;
             }
 
-            apiUrl += "&flags=" + flags + "&tag=" + encodeURIComponent(tag) + "&value=" + encodeURIComponent(value);
+            formData += "&flags=" + flags + "&tag=" + encodeURIComponent(tag) + "&value=" + encodeURIComponent(value);
             break;
 
         case "ANAME":
@@ -5022,7 +5085,7 @@ function addRecord() {
                 return;
             }
 
-            apiUrl += "&aname=" + encodeURIComponent(aname);
+            formData += "&aname=" + encodeURIComponent(aname);
             break;
 
         case "FWD":
@@ -5037,8 +5100,8 @@ function addRecord() {
             var dnssecValidation = $("#chkAddEditRecordDataForwarderDnssecValidation").prop("checked");
             var proxyType = $("input[name=rdAddEditRecordDataForwarderProxyType]:checked").val();
 
-            apiUrl += "&protocol=" + $('input[name=rdAddEditRecordDataForwarderProtocol]:checked').val() + "&forwarder=" + encodeURIComponent(forwarder);
-            apiUrl += "&forwarderPriority=" + forwarderPriority + "&dnssecValidation=" + dnssecValidation + "&proxyType=" + proxyType;
+            formData += "&protocol=" + $('input[name=rdAddEditRecordDataForwarderProtocol]:checked').val() + "&forwarder=" + encodeURIComponent(forwarder);
+            formData += "&forwarderPriority=" + forwarderPriority + "&dnssecValidation=" + dnssecValidation + "&proxyType=" + proxyType;
 
             switch (proxyType) {
                 case "Http":
@@ -5060,7 +5123,7 @@ function addRecord() {
                         return;
                     }
 
-                    apiUrl += "&proxyAddress=" + encodeURIComponent(proxyAddress) + "&proxyPort=" + proxyPort + "&proxyUsername=" + encodeURIComponent(proxyUsername) + "&proxyPassword=" + encodeURIComponent(proxyPassword);
+                    formData += "&proxyAddress=" + encodeURIComponent(proxyAddress) + "&proxyPort=" + proxyPort + "&proxyUsername=" + encodeURIComponent(proxyUsername) + "&proxyPassword=" + encodeURIComponent(proxyPassword);
                     break;
             }
             break;
@@ -5084,7 +5147,7 @@ function addRecord() {
 
             var recordData = $("#txtAddEditRecordDataData").val();
 
-            apiUrl += "&appName=" + encodeURIComponent(appName) + "&classPath=" + encodeURIComponent(classPath) + "&recordData=" + encodeURIComponent(recordData);
+            formData += "&appName=" + encodeURIComponent(appName) + "&classPath=" + encodeURIComponent(classPath) + "&recordData=" + encodeURIComponent(recordData);
             break;
 
         default:
@@ -5102,19 +5165,22 @@ function addRecord() {
                 return;
             }
 
-            apiUrl += "&rdata=" + encodeURIComponent(rdata);
+            formData += "&rdata=" + encodeURIComponent(rdata);
             break;
     }
 
     var node = $("#optZonesClusterNode").val();
 
-    apiUrl = "api/zones/records/add?zone=" + encodeURIComponent(zone) + "&domain=" + encodeURIComponent(domain) + "&type=" + encodeURIComponent(type) + "&ttl=" + ttl + "&overwrite=" + overwrite + "&comments=" + encodeURIComponent(comments) + "&expiryTtl=" + expiryTtl + apiUrl;
+    formData = "zone=" + encodeURIComponent(zone) + "&domain=" + encodeURIComponent(domain) + "&type=" + encodeURIComponent(type) + "&ttl=" + ttl + "&overwrite=" + overwrite + "&comments=" + encodeURIComponent(comments) + "&expiryTtl=" + expiryTtl + formData;
 
     btn.button("loading");
 
     HTTPRequest({
-        url: apiUrl + "&node=" + encodeURIComponent(node),
+        url: "api/zones/records/add?node=" + encodeURIComponent(node),
         token: sessionData.token,
+        method: "POST",
+        data: formData,
+        processData: false,
         success: function (responseJSON) {
             $("#modalAddEditRecord").modal("hide");
 
@@ -5549,7 +5615,7 @@ function updateRecord() {
     var comments = $("#txtAddEditRecordComments").val();
     var expiryTtl = $("#txtAddEditRecordExpiryTtl").val();
 
-    var apiUrl = "";
+    var formData = "";
 
     switch (type) {
         case "A":
@@ -5565,7 +5631,7 @@ function updateRecord() {
 
             var updateSvcbHints = zoneHasSvcbAutoHint(type == "A", type == "AAAA");
 
-            apiUrl += "&ipAddress=" + encodeURIComponent(ipAddress) + "&newIpAddress=" + encodeURIComponent(newIpAddress) + "&ptr=" + $("#chkAddEditRecordDataPtr").prop('checked') + "&createPtrZone=" + $("#chkAddEditRecordDataCreatePtrZone").prop('checked') + "&updateSvcbHints=" + updateSvcbHints;
+            formData += "&ipAddress=" + encodeURIComponent(ipAddress) + "&newIpAddress=" + encodeURIComponent(newIpAddress) + "&ptr=" + $("#chkAddEditRecordDataPtr").prop('checked') + "&createPtrZone=" + $("#chkAddEditRecordDataCreatePtrZone").prop('checked') + "&updateSvcbHints=" + updateSvcbHints;
             break;
 
         case "NS":
@@ -5580,7 +5646,7 @@ function updateRecord() {
 
             var glue = cleanTextList($("#txtAddEditRecordDataNsGlue").val());
 
-            apiUrl += "&nameServer=" + encodeURIComponent(nameServer) + "&newNameServer=" + encodeURIComponent(newNameServer) + "&glue=" + encodeURIComponent(glue);
+            formData += "&nameServer=" + encodeURIComponent(nameServer) + "&newNameServer=" + encodeURIComponent(newNameServer) + "&glue=" + encodeURIComponent(glue);
             break;
 
         case "CNAME":
@@ -5598,7 +5664,7 @@ function updateRecord() {
                 return;
             }
 
-            apiUrl += "&cname=" + encodeURIComponent(cname);
+            formData += "&cname=" + encodeURIComponent(cname);
             break;
 
         case "SOA":
@@ -5653,7 +5719,7 @@ function updateRecord() {
 
             var useSerialDateScheme = $("#chkEditRecordDataSoaUseSerialDateScheme").prop("checked");
 
-            apiUrl += "&primaryNameServer=" + encodeURIComponent(primaryNameServer) +
+            formData += "&primaryNameServer=" + encodeURIComponent(primaryNameServer) +
                 "&responsiblePerson=" + encodeURIComponent(responsiblePerson) +
                 "&serial=" + encodeURIComponent(serial) +
                 "&refresh=" + encodeURIComponent(refresh) +
@@ -5674,7 +5740,7 @@ function updateRecord() {
                 return;
             }
 
-            apiUrl += "&ptrName=" + encodeURIComponent(ptrName) + "&newPtrName=" + encodeURIComponent(newPtrName);
+            formData += "&ptrName=" + encodeURIComponent(ptrName) + "&newPtrName=" + encodeURIComponent(newPtrName);
             break;
 
         case "MX":
@@ -5693,12 +5759,10 @@ function updateRecord() {
                 return;
             }
 
-            apiUrl += "&preference=" + preference + "&newPreference=" + newPreference + "&exchange=" + encodeURIComponent(exchange) + "&newExchange=" + encodeURIComponent(newExchange);
+            formData += "&preference=" + preference + "&newPreference=" + newPreference + "&exchange=" + encodeURIComponent(exchange) + "&newExchange=" + encodeURIComponent(newExchange);
             break;
 
         case "TXT":
-            var text = divData.attr("data-record-text");
-
             var newText = $("#txtAddEditRecordDataTxt").val();
             if (newText === "") {
                 showAlert("warning", "Missing!", "Please enter a suitable value to update the record.", divAddEditRecordAlert);
@@ -5706,10 +5770,9 @@ function updateRecord() {
                 return;
             }
 
-            var splitText = divData.attr("data-record-split-text");
             var newSplitText = $("#chkAddEditRecordDataTxtSplitText").prop("checked");
 
-            apiUrl += "&text=" + encodeURIComponent(text) + "&newText=" + encodeURIComponent(newText) + "&splitText=" + splitText + "&newSplitText=" + newSplitText;
+            formData += "&characterStringsBase64=" + encodeURIComponent(divData.attr("data-record-character-strings-base64")) + "&newText=" + encodeURIComponent(newText) + "&newSplitText=" + newSplitText;
             break;
 
         case "RP":
@@ -5725,7 +5788,7 @@ function updateRecord() {
             if (newTxtDomain === "")
                 newTxtDomain = ".";
 
-            apiUrl += "&mailbox=" + encodeURIComponent(mailbox) + "&newMailbox=" + encodeURIComponent(newMailbox) + "&txtDomain=" + encodeURIComponent(txtDomain) + "&newTxtDomain=" + encodeURIComponent(newTxtDomain);
+            formData += "&mailbox=" + encodeURIComponent(mailbox) + "&newMailbox=" + encodeURIComponent(newMailbox) + "&txtDomain=" + encodeURIComponent(txtDomain) + "&newTxtDomain=" + encodeURIComponent(newTxtDomain);
             break;
 
         case "SRV":
@@ -5771,7 +5834,7 @@ function updateRecord() {
                 return;
             }
 
-            apiUrl += "&priority=" + priority + "&newPriority=" + newPriority + "&weight=" + weight + "&newWeight=" + newWeight + "&port=" + port + "&newPort=" + newPort + "&target=" + encodeURIComponent(target) + "&newTarget=" + encodeURIComponent(newTarget);
+            formData += "&priority=" + priority + "&newPriority=" + newPriority + "&weight=" + weight + "&newWeight=" + newWeight + "&port=" + port + "&newPort=" + newPort + "&target=" + encodeURIComponent(target) + "&newTarget=" + encodeURIComponent(newTarget);
             break;
 
         case "NAPTR":
@@ -5804,7 +5867,7 @@ function updateRecord() {
             if (newReplacement === "")
                 newReplacement = ".";
 
-            apiUrl += "&naptrOrder=" + order + "&naptrNewOrder=" + newOrder + "&naptrPreference=" + preference + "&naptrNewPreference=" + newPreference + "&naptrFlags=" + encodeURIComponent(flags) + "&naptrNewFlags=" + encodeURIComponent(newFlags) + "&naptrServices=" + encodeURIComponent(services) + "&naptrNewServices=" + encodeURIComponent(newServices) + "&naptrRegexp=" + encodeURIComponent(regexp) + "&naptrNewRegexp=" + encodeURIComponent(newRegexp) + "&naptrReplacement=" + encodeURIComponent(replacement) + "&naptrNewReplacement=" + encodeURIComponent(newReplacement);
+            formData += "&naptrOrder=" + order + "&naptrNewOrder=" + newOrder + "&naptrPreference=" + preference + "&naptrNewPreference=" + newPreference + "&naptrFlags=" + encodeURIComponent(flags) + "&naptrNewFlags=" + encodeURIComponent(newFlags) + "&naptrServices=" + encodeURIComponent(services) + "&naptrNewServices=" + encodeURIComponent(newServices) + "&naptrRegexp=" + encodeURIComponent(regexp) + "&naptrNewRegexp=" + encodeURIComponent(newRegexp) + "&naptrReplacement=" + encodeURIComponent(replacement) + "&naptrNewReplacement=" + encodeURIComponent(newReplacement);
             break;
 
         case "DNAME":
@@ -5815,7 +5878,7 @@ function updateRecord() {
                 return;
             }
 
-            apiUrl += "&dname=" + encodeURIComponent(dname);
+            formData += "&dname=" + encodeURIComponent(dname);
             break;
 
         case "DS":
@@ -5860,7 +5923,7 @@ function updateRecord() {
                 return;
             }
 
-            apiUrl += "&keyTag=" + keyTag + "&algorithm=" + algorithm + "&digestType=" + digestType + "&newKeyTag=" + newKeyTag + "&newAlgorithm=" + newAlgorithm + "&newDigestType=" + newDigestType + "&digest=" + encodeURIComponent(digest) + "&newDigest=" + encodeURIComponent(newDigest);
+            formData += "&keyTag=" + keyTag + "&algorithm=" + algorithm + "&digestType=" + digestType + "&newKeyTag=" + newKeyTag + "&newAlgorithm=" + newAlgorithm + "&newDigestType=" + newDigestType + "&digest=" + encodeURIComponent(digest) + "&newDigest=" + encodeURIComponent(newDigest);
             break;
 
         case "SSHFP":
@@ -5889,7 +5952,7 @@ function updateRecord() {
                 return;
             }
 
-            apiUrl += "&sshfpAlgorithm=" + sshfpAlgorithm + "&newSshfpAlgorithm=" + newSshfpAlgorithm + "&sshfpFingerprintType=" + sshfpFingerprintType + "&newSshfpFingerprintType=" + newSshfpFingerprintType + "&sshfpFingerprint=" + encodeURIComponent(sshfpFingerprint) + "&newSshfpFingerprint=" + encodeURIComponent(newSshfpFingerprint);
+            formData += "&sshfpAlgorithm=" + sshfpAlgorithm + "&newSshfpAlgorithm=" + newSshfpAlgorithm + "&sshfpFingerprintType=" + sshfpFingerprintType + "&newSshfpFingerprintType=" + newSshfpFingerprintType + "&sshfpFingerprint=" + encodeURIComponent(sshfpFingerprint) + "&newSshfpFingerprint=" + encodeURIComponent(newSshfpFingerprint);
             break;
 
         case "TLSA":
@@ -5926,7 +5989,7 @@ function updateRecord() {
                 return;
             }
 
-            apiUrl += "&tlsaCertificateUsage=" + tlsaCertificateUsage + "&newTlsaCertificateUsage=" + newTlsaCertificateUsage + "&tlsaSelector=" + tlsaSelector + "&newTlsaSelector=" + newTlsaSelector + "&tlsaMatchingType=" + tlsaMatchingType + "&newTlsaMatchingType=" + newTlsaMatchingType + "&tlsaCertificateAssociationData=" + encodeURIComponent(tlsaCertificateAssociationData) + "&newTlsaCertificateAssociationData=" + encodeURIComponent(newTlsaCertificateAssociationData);
+            formData += "&tlsaCertificateUsage=" + tlsaCertificateUsage + "&newTlsaCertificateUsage=" + newTlsaCertificateUsage + "&tlsaSelector=" + tlsaSelector + "&newTlsaSelector=" + newTlsaSelector + "&tlsaMatchingType=" + tlsaMatchingType + "&newTlsaMatchingType=" + newTlsaMatchingType + "&tlsaCertificateAssociationData=" + encodeURIComponent(tlsaCertificateAssociationData) + "&newTlsaCertificateAssociationData=" + encodeURIComponent(newTlsaCertificateAssociationData);
             break;
 
         case "SVCB":
@@ -5972,7 +6035,7 @@ function updateRecord() {
             var autoIpv4Hint = $("#chkAddEditRecordDataSvcbAutoIpv4Hint").prop("checked");
             var autoIpv6Hint = $("#chkAddEditRecordDataSvcbAutoIpv6Hint").prop("checked");
 
-            apiUrl += "&svcPriority=" + svcPriority + "&newSvcPriority=" + newSvcPriority + "&svcTargetName=" + encodeURIComponent(svcTargetName) + "&newSvcTargetName=" + encodeURIComponent(newSvcTargetName) + "&svcParams=" + encodeURIComponent(svcParams) + "&newSvcParams=" + encodeURIComponent(newSvcParams) + "&autoIpv4Hint=" + autoIpv4Hint + "&autoIpv6Hint=" + autoIpv6Hint;
+            formData += "&svcPriority=" + svcPriority + "&newSvcPriority=" + newSvcPriority + "&svcTargetName=" + encodeURIComponent(svcTargetName) + "&newSvcTargetName=" + encodeURIComponent(newSvcTargetName) + "&svcParams=" + encodeURIComponent(svcParams) + "&newSvcParams=" + encodeURIComponent(newSvcParams) + "&autoIpv4Hint=" + autoIpv4Hint + "&autoIpv6Hint=" + autoIpv6Hint;
             break;
 
         case "URI":
@@ -6003,7 +6066,7 @@ function updateRecord() {
                 return;
             }
 
-            apiUrl += "&uriPriority=" + uriPriority + "&newUriPriority=" + newUriPriority + "&uriWeight=" + uriWeight + "&newUriWeight=" + newUriWeight + "&uri=" + encodeURIComponent(uri) + "&newUri=" + encodeURIComponent(newUri);
+            formData += "&uriPriority=" + uriPriority + "&newUriPriority=" + newUriPriority + "&uriWeight=" + uriWeight + "&newUriWeight=" + newUriWeight + "&uri=" + encodeURIComponent(uri) + "&newUri=" + encodeURIComponent(newUri);
             break;
 
         case "CAA":
@@ -6027,7 +6090,7 @@ function updateRecord() {
                 return;
             }
 
-            apiUrl += "&flags=" + flags + "&tag=" + encodeURIComponent(tag) + "&newFlags=" + newFlags + "&newTag=" + encodeURIComponent(newTag) + "&value=" + encodeURIComponent(value) + "&newValue=" + encodeURIComponent(newValue);
+            formData += "&flags=" + flags + "&tag=" + encodeURIComponent(tag) + "&newFlags=" + newFlags + "&newTag=" + encodeURIComponent(newTag) + "&value=" + encodeURIComponent(value) + "&newValue=" + encodeURIComponent(newValue);
             break;
 
         case "ANAME":
@@ -6040,7 +6103,7 @@ function updateRecord() {
                 return;
             }
 
-            apiUrl += "&aname=" + encodeURIComponent(aname) + "&newAName=" + encodeURIComponent(newAName);
+            formData += "&aname=" + encodeURIComponent(aname) + "&newAName=" + encodeURIComponent(newAName);
             break;
 
         case "FWD":
@@ -6059,12 +6122,12 @@ function updateRecord() {
             var forwarderPriority = $("#txtAddEditRecordDataForwarderPriority").val();
             var dnssecValidation = $("#chkAddEditRecordDataForwarderDnssecValidation").prop("checked");
 
-            apiUrl += "&protocol=" + protocol + "&newProtocol=" + newProtocol + "&forwarder=" + encodeURIComponent(forwarder) + "&newForwarder=" + encodeURIComponent(newForwarder) + "&forwarderPriority=" + forwarderPriority + "&dnssecValidation=" + dnssecValidation;
+            formData += "&protocol=" + protocol + "&newProtocol=" + newProtocol + "&forwarder=" + encodeURIComponent(forwarder) + "&newForwarder=" + encodeURIComponent(newForwarder) + "&forwarderPriority=" + forwarderPriority + "&dnssecValidation=" + dnssecValidation;
 
             if (newForwarder !== "this-server") {
                 var proxyType = $("input[name=rdAddEditRecordDataForwarderProxyType]:checked").val();
 
-                apiUrl += "&proxyType=" + proxyType;
+                formData += "&proxyType=" + proxyType;
 
                 switch (proxyType) {
                     case "Http":
@@ -6086,14 +6149,14 @@ function updateRecord() {
                             return;
                         }
 
-                        apiUrl += "&proxyAddress=" + encodeURIComponent(proxyAddress) + "&proxyPort=" + proxyPort + "&proxyUsername=" + encodeURIComponent(proxyUsername) + "&proxyPassword=" + encodeURIComponent(proxyPassword);
+                        formData += "&proxyAddress=" + encodeURIComponent(proxyAddress) + "&proxyPort=" + proxyPort + "&proxyUsername=" + encodeURIComponent(proxyUsername) + "&proxyPassword=" + encodeURIComponent(proxyPassword);
                         break;
                 }
             }
             break;
 
         case "APP":
-            apiUrl += "&appName=" + encodeURIComponent(divData.attr("data-record-app-name")) + "&classPath=" + encodeURIComponent(divData.attr("data-record-classpath")) + "&recordData=" + encodeURIComponent($("#txtAddEditRecordDataData").val());
+            formData += "&appName=" + encodeURIComponent(divData.attr("data-record-app-name")) + "&classPath=" + encodeURIComponent(divData.attr("data-record-classpath")) + "&recordData=" + encodeURIComponent($("#txtAddEditRecordDataData").val());
             break;
 
         default:
@@ -6107,19 +6170,22 @@ function updateRecord() {
                 return;
             }
 
-            apiUrl += "&rdata=" + encodeURIComponent(rdata) + "&newRData=" + encodeURIComponent(newRData);
+            formData += "&rdata=" + encodeURIComponent(rdata) + "&newRData=" + encodeURIComponent(newRData);
             break;
     }
 
     var node = $("#optZonesClusterNode").val();
 
-    apiUrl = "api/zones/records/update?zone=" + encodeURIComponent(zone) + "&type=" + encodeURIComponent(type) + "&domain=" + encodeURIComponent(domain) + "&newDomain=" + encodeURIComponent(newDomain) + "&ttl=" + ttl + "&disable=" + disable + "&comments=" + encodeURIComponent(comments) + "&expiryTtl=" + expiryTtl + apiUrl;
+    formData = "zone=" + encodeURIComponent(zone) + "&type=" + encodeURIComponent(type) + "&domain=" + encodeURIComponent(domain) + "&newDomain=" + encodeURIComponent(newDomain) + "&ttl=" + ttl + "&disable=" + disable + "&comments=" + encodeURIComponent(comments) + "&expiryTtl=" + expiryTtl + formData;
 
     btn.button("loading");
 
     HTTPRequest({
-        url: apiUrl + "&node=" + encodeURIComponent(node),
+        url: "api/zones/records/update?node=" + encodeURIComponent(node),
         token: sessionData.token,
+        method: "POST",
+        data: formData,
+        processData: false,
         success: function (responseJSON) {
             $("#modalAddEditRecord").modal("hide");
 
@@ -6139,13 +6205,7 @@ function updateRecord() {
                 editZoneFilteredRecords[index] = responseJSON.response.updatedRecord;
 
                 //show updated record
-                var zoneType;
-                if (responseJSON.response.zone.internal)
-                    zoneType = "Internal";
-                else
-                    zoneType = responseJSON.response.zone.type;
-
-                var tableHtmlRow = getZoneRecordRowHtml(index, zone, zoneType, responseJSON.response.updatedRecord);
+                var tableHtmlRow = getZoneRecordRowHtml(index, zone, responseJSON.response.zone.type, responseJSON.response.updatedRecord);
                 $("#trZoneRecord" + index).replaceWith(tableHtmlRow);
             }
 
@@ -6183,62 +6243,62 @@ function updateRecordState(objBtn, disable) {
 
     var node = $("#optZonesClusterNode").val();
 
-    var apiUrl = "api/zones/records/update?zone=" + encodeURIComponent(zone) + "&type=" + encodeURIComponent(type) + "&domain=" + encodeURIComponent(domain) + "&ttl=" + ttl + "&disable=" + disable + "&comments=" + encodeURIComponent(comments) + "&expiryTtl=" + expiryTtl;
+    var formData = "zone=" + encodeURIComponent(zone) + "&type=" + encodeURIComponent(type) + "&domain=" + encodeURIComponent(domain) + "&ttl=" + ttl + "&disable=" + disable + "&comments=" + encodeURIComponent(comments) + "&expiryTtl=" + expiryTtl;
 
     switch (type) {
         case "A":
         case "AAAA":
             var updateSvcbHints = zoneHasSvcbAutoHint(type == "A", type == "AAAA");
 
-            apiUrl += "&ipAddress=" + encodeURIComponent(divData.attr("data-record-ip-address")) + "&updateSvcbHints=" + updateSvcbHints;
+            formData += "&ipAddress=" + encodeURIComponent(divData.attr("data-record-ip-address")) + "&updateSvcbHints=" + updateSvcbHints;
             break;
 
         case "NS":
-            apiUrl += "&nameServer=" + encodeURIComponent(divData.attr("data-record-name-server")) + "&glue=" + encodeURIComponent(divData.attr("data-record-glue"));
+            formData += "&nameServer=" + encodeURIComponent(divData.attr("data-record-name-server")) + "&glue=" + encodeURIComponent(divData.attr("data-record-glue"));
             break;
 
         case "CNAME":
-            apiUrl += "&cname=" + encodeURIComponent(divData.attr("data-record-cname"));
+            formData += "&cname=" + encodeURIComponent(divData.attr("data-record-cname"));
             break;
 
         case "PTR":
-            apiUrl += "&ptrName=" + encodeURIComponent(divData.attr("data-record-ptr-name"));
+            formData += "&ptrName=" + encodeURIComponent(divData.attr("data-record-ptr-name"));
             break;
 
         case "MX":
-            apiUrl += "&preference=" + divData.attr("data-record-preference") + "&exchange=" + encodeURIComponent(divData.attr("data-record-exchange"));
+            formData += "&preference=" + divData.attr("data-record-preference") + "&exchange=" + encodeURIComponent(divData.attr("data-record-exchange"));
             break;
 
         case "TXT":
-            apiUrl += "&text=" + encodeURIComponent(divData.attr("data-record-text")) + "&splitText=" + divData.attr("data-record-split-text");
+            formData += "&characterStringsBase64=" + encodeURIComponent(divData.attr("data-record-character-strings-base64"));
             break;
 
         case "RP":
-            apiUrl += "&mailbox=" + encodeURIComponent(divData.attr("data-record-mailbox")) + "&txtDomain=" + encodeURIComponent(divData.attr("data-record-txt-domain"));
+            formData += "&mailbox=" + encodeURIComponent(divData.attr("data-record-mailbox")) + "&txtDomain=" + encodeURIComponent(divData.attr("data-record-txt-domain"));
             break;
 
         case "SRV":
-            apiUrl += "&priority=" + divData.attr("data-record-priority") + "&weight=" + divData.attr("data-record-weight") + "&port=" + divData.attr("data-record-port") + "&target=" + encodeURIComponent(divData.attr("data-record-target"));
+            formData += "&priority=" + divData.attr("data-record-priority") + "&weight=" + divData.attr("data-record-weight") + "&port=" + divData.attr("data-record-port") + "&target=" + encodeURIComponent(divData.attr("data-record-target"));
             break;
 
         case "NAPTR":
-            apiUrl += "&naptrOrder=" + divData.attr("data-record-order") + "&naptrPreference=" + divData.attr("data-record-preference") + "&naptrFlags=" + encodeURIComponent(divData.attr("data-record-flags")) + "&naptrServices=" + encodeURIComponent(divData.attr("data-record-services")) + "&naptrRegexp=" + encodeURIComponent(divData.attr("data-record-regexp")) + "&naptrReplacement=" + encodeURIComponent(divData.attr("data-record-replacement"));
+            formData += "&naptrOrder=" + divData.attr("data-record-order") + "&naptrPreference=" + divData.attr("data-record-preference") + "&naptrFlags=" + encodeURIComponent(divData.attr("data-record-flags")) + "&naptrServices=" + encodeURIComponent(divData.attr("data-record-services")) + "&naptrRegexp=" + encodeURIComponent(divData.attr("data-record-regexp")) + "&naptrReplacement=" + encodeURIComponent(divData.attr("data-record-replacement"));
             break;
 
         case "DNAME":
-            apiUrl += "&dname=" + encodeURIComponent(divData.attr("data-record-dname"));
+            formData += "&dname=" + encodeURIComponent(divData.attr("data-record-dname"));
             break;
 
         case "DS":
-            apiUrl += "&keyTag=" + divData.attr("data-record-key-tag") + "&algorithm=" + divData.attr("data-record-algorithm") + "&digestType=" + divData.attr("data-record-digest-type") + "&digest=" + encodeURIComponent(divData.attr("data-record-digest"));
+            formData += "&keyTag=" + divData.attr("data-record-key-tag") + "&algorithm=" + divData.attr("data-record-algorithm") + "&digestType=" + divData.attr("data-record-digest-type") + "&digest=" + encodeURIComponent(divData.attr("data-record-digest"));
             break;
 
         case "SSHFP":
-            apiUrl += "&sshfpAlgorithm=" + divData.attr("data-record-algorithm") + "&sshfpFingerprintType=" + divData.attr("data-record-fingerprint-type") + "&sshfpFingerprint=" + encodeURIComponent(divData.attr("data-record-fingerprint"));
+            formData += "&sshfpAlgorithm=" + divData.attr("data-record-algorithm") + "&sshfpFingerprintType=" + divData.attr("data-record-fingerprint-type") + "&sshfpFingerprint=" + encodeURIComponent(divData.attr("data-record-fingerprint"));
             break;
 
         case "TLSA":
-            apiUrl += "&tlsaCertificateUsage=" + divData.attr("data-record-certificate-usage") + "&tlsaSelector=" + divData.attr("data-record-selector") + "&tlsaMatchingType=" + divData.attr("data-record-matching-type") + "&tlsaCertificateAssociationData=" + encodeURIComponent(divData.attr("data-record-certificate-association-data"));
+            formData += "&tlsaCertificateUsage=" + divData.attr("data-record-certificate-usage") + "&tlsaSelector=" + divData.attr("data-record-selector") + "&tlsaMatchingType=" + divData.attr("data-record-matching-type") + "&tlsaCertificateAssociationData=" + encodeURIComponent(divData.attr("data-record-certificate-association-data"));
             break;
 
         case "SVCB":
@@ -6263,50 +6323,53 @@ function updateRecordState(objBtn, disable) {
             var autoIpv4Hint = divData.attr("data-record-auto-ipv4hint");
             var autoIpv6Hint = divData.attr("data-record-auto-ipv6hint");
 
-            apiUrl += "&svcPriority=" + svcPriority + "&svcTargetName=" + encodeURIComponent(svcTargetName) + "&svcParams=" + encodeURIComponent(svcParams) + "&autoIpv4Hint=" + autoIpv4Hint + "&autoIpv6Hint=" + autoIpv6Hint;
+            formData += "&svcPriority=" + svcPriority + "&svcTargetName=" + encodeURIComponent(svcTargetName) + "&svcParams=" + encodeURIComponent(svcParams) + "&autoIpv4Hint=" + autoIpv4Hint + "&autoIpv6Hint=" + autoIpv6Hint;
             break;
 
         case "URI":
-            apiUrl += "&uriPriority=" + divData.attr("data-record-priority") + "&uriWeight=" + encodeURIComponent(divData.attr("data-record-weight")) + "&uri=" + encodeURIComponent(divData.attr("data-record-uri"));
+            formData += "&uriPriority=" + divData.attr("data-record-priority") + "&uriWeight=" + encodeURIComponent(divData.attr("data-record-weight")) + "&uri=" + encodeURIComponent(divData.attr("data-record-uri"));
             break;
 
         case "CAA":
-            apiUrl += "&flags=" + divData.attr("data-record-flags") + "&tag=" + encodeURIComponent(divData.attr("data-record-tag")) + "&value=" + encodeURIComponent(divData.attr("data-record-value"));
+            formData += "&flags=" + divData.attr("data-record-flags") + "&tag=" + encodeURIComponent(divData.attr("data-record-tag")) + "&value=" + encodeURIComponent(divData.attr("data-record-value"));
             break;
 
         case "ANAME":
-            apiUrl += "&aname=" + encodeURIComponent(divData.attr("data-record-aname"));
+            formData += "&aname=" + encodeURIComponent(divData.attr("data-record-aname"));
             break;
 
         case "FWD":
-            apiUrl += "&protocol=" + divData.attr("data-record-protocol") + "&forwarder=" + encodeURIComponent(divData.attr("data-record-forwarder"));
+            formData += "&protocol=" + divData.attr("data-record-protocol") + "&forwarder=" + encodeURIComponent(divData.attr("data-record-forwarder"));
 
             var proxyType = divData.attr("data-record-proxy-type");
 
-            apiUrl += "&forwarderPriority=" + divData.attr("data-record-priority") + "&dnssecValidation=" + divData.attr("data-record-dnssec-validation") + "&proxyType=" + proxyType;
+            formData += "&forwarderPriority=" + divData.attr("data-record-priority") + "&dnssecValidation=" + divData.attr("data-record-dnssec-validation") + "&proxyType=" + proxyType;
 
             switch (proxyType) {
                 case "Http":
                 case "Socks5":
-                    apiUrl += "&proxyAddress=" + encodeURIComponent(divData.attr("data-record-proxy-address")) + "&proxyPort=" + divData.attr("data-record-proxy-port") + "&proxyUsername=" + encodeURIComponent(divData.attr("data-record-proxy-username")) + "&proxyPassword=" + encodeURIComponent(divData.attr("data-record-proxy-password"));
+                    formData += "&proxyAddress=" + encodeURIComponent(divData.attr("data-record-proxy-address")) + "&proxyPort=" + divData.attr("data-record-proxy-port") + "&proxyUsername=" + encodeURIComponent(divData.attr("data-record-proxy-username")) + "&proxyPassword=" + encodeURIComponent(divData.attr("data-record-proxy-password"));
                     break;
             }
             break;
 
         case "APP":
-            apiUrl += "&appName=" + encodeURIComponent(divData.attr("data-record-app-name")) + "&classPath=" + encodeURIComponent(divData.attr("data-record-classpath")) + "&recordData=" + encodeURIComponent(divData.attr("data-record-data"));
+            formData += "&appName=" + encodeURIComponent(divData.attr("data-record-app-name")) + "&classPath=" + encodeURIComponent(divData.attr("data-record-classpath")) + "&recordData=" + encodeURIComponent(divData.attr("data-record-data"));
             break;
 
         default:
-            apiUrl += "&rdata=" + encodeURIComponent(divData.attr("data-record-rdata"));
+            formData += "&rdata=" + encodeURIComponent(divData.attr("data-record-rdata"));
             break;
     }
 
     btn.button("loading");
 
     HTTPRequest({
-        url: apiUrl + "&node=" + encodeURIComponent(node),
+        url: "api/zones/records/update?node=" + encodeURIComponent(node),
         token: sessionData.token,
+        method: "POST",
+        data: formData,
+        processData: false,
         success: function (responseJSON) {
             btn.button("reset");
 
@@ -6317,13 +6380,7 @@ function updateRecordState(objBtn, disable) {
             editZoneFilteredRecords[index] = responseJSON.response.updatedRecord;
 
             //show updated record
-            var zoneType;
-            if (responseJSON.response.zone.internal)
-                zoneType = "Internal";
-            else
-                zoneType = responseJSON.response.zone.type;
-
-            var tableHtmlRow = getZoneRecordRowHtml(index, zone, zoneType, responseJSON.response.updatedRecord);
+            var tableHtmlRow = getZoneRecordRowHtml(index, zone, responseJSON.response.zone.type, responseJSON.response.updatedRecord);
             $("#trZoneRecord" + index).replaceWith(tableHtmlRow);
 
             if (disable)
@@ -6358,54 +6415,54 @@ function deleteRecord(objBtn) {
 
     var node = $("#optZonesClusterNode").val();
 
-    var apiUrl = "api/zones/records/delete?zone=" + encodeURIComponent(zone) + "&domain=" + encodeURIComponent(domain) + "&type=" + encodeURIComponent(type);
+    var formData = "zone=" + encodeURIComponent(zone) + "&domain=" + encodeURIComponent(domain) + "&type=" + encodeURIComponent(type);
 
     switch (type) {
         case "A":
         case "AAAA":
             var updateSvcbHints = zoneHasSvcbAutoHint(type == "A", type == "AAAA");
 
-            apiUrl += "&ipAddress=" + encodeURIComponent(divData.attr("data-record-ip-address")) + "&updateSvcbHints=" + updateSvcbHints;
+            formData += "&ipAddress=" + encodeURIComponent(divData.attr("data-record-ip-address")) + "&updateSvcbHints=" + updateSvcbHints;
             break;
 
         case "NS":
-            apiUrl += "&nameServer=" + encodeURIComponent(divData.attr("data-record-name-server"));
+            formData += "&nameServer=" + encodeURIComponent(divData.attr("data-record-name-server"));
             break;
 
         case "PTR":
-            apiUrl += "&ptrName=" + encodeURIComponent(divData.attr("data-record-ptr-name"));
+            formData += "&ptrName=" + encodeURIComponent(divData.attr("data-record-ptr-name"));
             break;
 
         case "MX":
-            apiUrl += "&preference=" + divData.attr("data-record-preference") + "&exchange=" + encodeURIComponent(divData.attr("data-record-exchange"));
+            formData += "&preference=" + divData.attr("data-record-preference") + "&exchange=" + encodeURIComponent(divData.attr("data-record-exchange"));
             break;
 
         case "TXT":
-            apiUrl += "&text=" + encodeURIComponent(divData.attr("data-record-text")) + "&splitText=" + divData.attr("data-record-split-text");
+            formData += "&characterStringsBase64=" + encodeURIComponent(divData.attr("data-record-character-strings-base64"));
             break;
 
         case "RP":
-            apiUrl += "&mailbox=" + encodeURIComponent(divData.attr("data-record-mailbox")) + "&txtDomain=" + encodeURIComponent(divData.attr("data-record-txt-domain"));
+            formData += "&mailbox=" + encodeURIComponent(divData.attr("data-record-mailbox")) + "&txtDomain=" + encodeURIComponent(divData.attr("data-record-txt-domain"));
             break;
 
         case "SRV":
-            apiUrl += "&priority=" + divData.attr("data-record-priority") + "&weight=" + divData.attr("data-record-weight") + "&port=" + divData.attr("data-record-port") + "&target=" + encodeURIComponent(divData.attr("data-record-target"));
+            formData += "&priority=" + divData.attr("data-record-priority") + "&weight=" + divData.attr("data-record-weight") + "&port=" + divData.attr("data-record-port") + "&target=" + encodeURIComponent(divData.attr("data-record-target"));
             break;
 
         case "NAPTR":
-            apiUrl += "&naptrOrder=" + divData.attr("data-record-order") + "&naptrPreference=" + divData.attr("data-record-preference") + "&naptrFlags=" + encodeURIComponent(divData.attr("data-record-flags")) + "&naptrServices=" + encodeURIComponent(divData.attr("data-record-services")) + "&naptrRegexp=" + encodeURIComponent(divData.attr("data-record-regexp")) + "&naptrReplacement=" + encodeURIComponent(divData.attr("data-record-replacement"));
+            formData += "&naptrOrder=" + divData.attr("data-record-order") + "&naptrPreference=" + divData.attr("data-record-preference") + "&naptrFlags=" + encodeURIComponent(divData.attr("data-record-flags")) + "&naptrServices=" + encodeURIComponent(divData.attr("data-record-services")) + "&naptrRegexp=" + encodeURIComponent(divData.attr("data-record-regexp")) + "&naptrReplacement=" + encodeURIComponent(divData.attr("data-record-replacement"));
             break;
 
         case "DS":
-            apiUrl += "&keyTag=" + divData.attr("data-record-key-tag") + "&algorithm=" + divData.attr("data-record-algorithm") + "&digestType=" + divData.attr("data-record-digest-type") + "&digest=" + encodeURIComponent(divData.attr("data-record-digest"));
+            formData += "&keyTag=" + divData.attr("data-record-key-tag") + "&algorithm=" + divData.attr("data-record-algorithm") + "&digestType=" + divData.attr("data-record-digest-type") + "&digest=" + encodeURIComponent(divData.attr("data-record-digest"));
             break;
 
         case "SSHFP":
-            apiUrl += "&sshfpAlgorithm=" + divData.attr("data-record-algorithm") + "&sshfpFingerprintType=" + divData.attr("data-record-fingerprint-type") + "&sshfpFingerprint=" + encodeURIComponent(divData.attr("data-record-fingerprint"));
+            formData += "&sshfpAlgorithm=" + divData.attr("data-record-algorithm") + "&sshfpFingerprintType=" + divData.attr("data-record-fingerprint-type") + "&sshfpFingerprint=" + encodeURIComponent(divData.attr("data-record-fingerprint"));
             break;
 
         case "TLSA":
-            apiUrl += "&tlsaCertificateUsage=" + divData.attr("data-record-certificate-usage") + "&tlsaSelector=" + divData.attr("data-record-selector") + "&tlsaMatchingType=" + divData.attr("data-record-matching-type") + "&tlsaCertificateAssociationData=" + encodeURIComponent(divData.attr("data-record-certificate-association-data"));
+            formData += "&tlsaCertificateUsage=" + divData.attr("data-record-certificate-usage") + "&tlsaSelector=" + divData.attr("data-record-selector") + "&tlsaMatchingType=" + divData.attr("data-record-matching-type") + "&tlsaCertificateAssociationData=" + encodeURIComponent(divData.attr("data-record-certificate-association-data"));
             break;
 
         case "SVCB":
@@ -6427,36 +6484,39 @@ function deleteRecord(objBtn) {
                     svcParams = false;
             }
 
-            apiUrl += "&svcPriority=" + svcPriority + "&svcTargetName=" + encodeURIComponent(svcTargetName) + "&svcParams=" + encodeURIComponent(svcParams);
+            formData += "&svcPriority=" + svcPriority + "&svcTargetName=" + encodeURIComponent(svcTargetName) + "&svcParams=" + encodeURIComponent(svcParams);
             break;
 
         case "URI":
-            apiUrl += "&uriPriority=" + divData.attr("data-record-priority") + "&uriWeight=" + encodeURIComponent(divData.attr("data-record-weight")) + "&uri=" + encodeURIComponent(divData.attr("data-record-uri"));
+            formData += "&uriPriority=" + divData.attr("data-record-priority") + "&uriWeight=" + encodeURIComponent(divData.attr("data-record-weight")) + "&uri=" + encodeURIComponent(divData.attr("data-record-uri"));
             break;
 
         case "CAA":
-            apiUrl += "&flags=" + divData.attr("data-record-flags") + "&tag=" + encodeURIComponent(divData.attr("data-record-tag")) + "&value=" + encodeURIComponent(divData.attr("data-record-value"));
+            formData += "&flags=" + divData.attr("data-record-flags") + "&tag=" + encodeURIComponent(divData.attr("data-record-tag")) + "&value=" + encodeURIComponent(divData.attr("data-record-value"));
             break;
 
         case "ANAME":
-            apiUrl += "&aname=" + encodeURIComponent(divData.attr("data-record-aname"));
+            formData += "&aname=" + encodeURIComponent(divData.attr("data-record-aname"));
             break;
 
         case "FWD":
-            apiUrl += "&protocol=" + divData.attr("data-record-protocol") + "&forwarder=" + encodeURIComponent(divData.attr("data-record-forwarder"));
+            formData += "&protocol=" + divData.attr("data-record-protocol") + "&forwarder=" + encodeURIComponent(divData.attr("data-record-forwarder"));
             break;
 
         default:
             var rdata = divData.attr("data-record-rdata");
             if (rdata != null)
-                apiUrl += "&rdata=" + encodeURIComponent(rdata);
+                formData += "&rdata=" + encodeURIComponent(rdata);
     }
 
     btn.button("loading");
 
     HTTPRequest({
-        url: apiUrl + "&node=" + encodeURIComponent(node),
+        url: "api/zones/records/delete?node=" + encodeURIComponent(node),
         token: sessionData.token,
+        method: "POST",
+        data: formData,
+        processData: false,
         success: function (responseJSON) {
             //update local array
             editZoneRecords.splice(recordIndex, 1);

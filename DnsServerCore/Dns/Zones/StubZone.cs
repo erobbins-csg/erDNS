@@ -367,7 +367,7 @@ namespace DnsServerCore.Dns.Zones
                         strNameServers += ", " + nameServer.ToString();
                 }
 
-                _dnsServer.LogManager.Write("DNS Server failed to refresh '" + ToString() + "' Stub zone from: " + strNameServers + "\r\n" + ex.ToString());
+                _dnsServer.LogManager.Write("DNS Server failed to refresh '" + ToString() + "' Stub zone from: " + strNameServers, ex);
 
                 return false;
             }

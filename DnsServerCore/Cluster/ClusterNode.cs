@@ -193,7 +193,7 @@ namespace DnsServerCore.Cluster
 
             if (_apiClient is null)
             {
-                _apiClient = new HttpApiClient(_url, _clusterManager.DnsWebService.DnsServer.Proxy, _clusterManager.DnsWebService.DnsServer.IPv6Mode, false, new InternalDnsClient(_clusterManager.DnsWebService.DnsServer, this));
+                HttpApiClient apiClient = new HttpApiClient(_url, _clusterManager.DnsWebService.DnsServer.Proxy, _clusterManager.DnsWebService.DnsServer.IPv6Mode, false, new InternalDnsClient(_clusterManager.DnsWebService.DnsServer, this));
 
                 UserSession clusterApiToken = null;
 
@@ -209,7 +209,9 @@ namespace DnsServerCore.Cluster
                 if (clusterApiToken is null)
                     throw new InvalidOperationException("No API token was found for the Cluster domain.");
 
-                _apiClient.UseApiToken(clusterApiToken.Token);
+                apiClient.UseApiToken(clusterApiToken.Token);
+
+                _apiClient = apiClient;
             }
 
             return _apiClient;
@@ -243,7 +245,7 @@ namespace DnsServerCore.Cluster
             catch (Exception ex)
             {
                 success = false;
-                _clusterManager.DnsWebService.LogManager.Write("Heartbeat failed for " + _type.ToString() + " node '" + ToString() + "'.\r\n" + ex.ToString());
+                _clusterManager.DnsWebService.LogManager.Write("Heartbeat failed for " + _type.ToString() + " node '" + ToString() + "'.", ex);
             }
             finally
             {
@@ -571,7 +573,7 @@ namespace DnsServerCore.Cluster
             {
                 _state = ClusterNodeState.Unreachable;
 
-                _clusterManager.DnsWebService.LogManager.Write("DNS Server failed to notify Secondary node '" + ToString() + "' for server configuration changes.\r\n" + ex.ToString());
+                _clusterManager.DnsWebService.LogManager.Write("DNS Server failed to notify Secondary node '" + ToString() + "' for server configuration changes.", ex);
             }
         }
 

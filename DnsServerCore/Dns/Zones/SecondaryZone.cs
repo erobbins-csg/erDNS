@@ -579,7 +579,7 @@ namespace DnsServerCore.Dns.Zones
             }
             catch (Exception ex)
             {
-                _dnsServer.LogManager.Write("DNS Server failed to refresh '" + ToString() + "' " + GetZoneTypeName() + " zone from: " + primaryNameServers.Join() + "\r\n" + ex.ToString());
+                _dnsServer.LogManager.Write("DNS Server failed to refresh '" + ToString() + "' " + GetZoneTypeName() + " zone from: " + primaryNameServers.Join(), ex);
 
                 return (false, 0u);
             }
@@ -690,7 +690,7 @@ namespace DnsServerCore.Dns.Zones
                             continue;
                     }
 
-                    if (computedDigest.ListEquals(zoneMd.Digest))
+                    if (computedDigest.SequenceEqual(zoneMd.Digest))
                     {
                         //validation successfull
                         _validationFailed = false;
@@ -707,7 +707,7 @@ namespace DnsServerCore.Dns.Zones
             {
                 //validation failed
                 _validationFailed = true;
-                _dnsServer.LogManager.Write("ZONEMD validation failed for the " + GetZoneTypeName() + " zone '" + ToString() + "':\r\n" + ex.ToString());
+                _dnsServer.LogManager.Write("ZONEMD validation failed for the " + GetZoneTypeName() + " zone '" + ToString() + "'.", ex);
             }
         }
 

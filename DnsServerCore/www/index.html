@@ -64,10 +64,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
             </a>
             <ul class="dropdown-menu">
                 <li><a href="#" onclick="showMyProfileModal(); return false;">My Profile</a></li>
-                <li><a href="#" onclick="showCreateMyApiTokenModal(); return false;">Create API Token</a></li>
                 <li><a id="mnuUserChangePassword" href="#" onclick="showChangePasswordModal(); return false;">Change Password</a></li>
                 <li><a id="mnuUserConfigure2FA" href="#" onclick="showConfigure2FAModal(); return false;">Configure 2FA</a></li>
+                <li><a href="#" onclick="showCreateMyApiTokenModal(); return false;">Create API Token</a></li>
+                <li role="separator" class="divider"></li>
                 <li><a href="#" onclick="showChangeThemeModal(); return false;">Change Theme</a></li>
+                <li><a id="mnuDisableCheckForUpdateNotification" href="#" onclick="disableUpdateNotification(); return false;" style="display: none;">Disable Update Notification</a></li>
+                <li><a id="mnuEnableCheckForUpdateNotification" href="#" onclick="enableUpdateNotification(); return false;" style="display: none;">Enable Update Notification</a></li>
+                <li><a href="#" onclick="checkForUpdate(true); return false;">Check For Update</a></li>
                 <li role="separator" class="divider"></li>
                 <li><a href="#" onclick="logout(); return false;">Logout</a></li>
             </ul>
@@ -428,20 +432,34 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                             <div class="pull-right">
                                                 <div class="form-group" style="margin-right: 0px;">
                                                     <button type="button" class="btn btn-primary" style="padding: 2px 0px; width: 100px;" onclick="showAddZoneModal();">Add Zone</button>
+                                                    <button type="button" class="btn btn-danger" style="padding: 2px 0px; width: 100px;" onclick="deleteSelectedZones(this);">Delete Zones</button>
                                                     <select id="optZonesClusterNode" class="form-control cluster-node-dropdown" onchange="refreshZones();"></select>
                                                 </div>
                                             </div>
                                             <div class="clearfix"></div>
                                         </div>
 
-                                        <div class="form-inline">
-                                            <form class="pull-left">
+                                        <form class="form-inline well" style="padding: 10px 10px 0 10px; margin-bottom: 10px;">
+                                            <div class="pull-left">
                                                 <div class="form-group">
-                                                    <input id="txtZonesEdit" class="form-control" style="width: 300px;" type="text" placeholder="example.com" />
-                                                    <button type="submit" class="btn btn-primary" onclick="showEditZone(); return false;">Edit</button>
+                                                    <label for="txtZonesFilterName">Name</label>
+                                                    <input id="txtZonesFilterName" class="form-control" style="width: 300px;" type="text" placeholder="abc or a* or *b* or a?c" />
                                                 </div>
-                                            </form>
-                                            <form class="pull-right">
+                                                <div class="form-group">
+                                                    <label for="optZonesFilterType">Type</label>
+                                                    <select class="form-control" id="optZonesFilterType">
+                                                        <option selected></option>
+                                                        <option>Primary</option>
+                                                        <option>Secondary</option>
+                                                        <option>Stub</option>
+                                                        <option>Forwarder</option>
+                                                        <option>SecondaryForwarder</option>
+                                                        <option>Catalog</option>
+                                                        <option>SecondaryCatalog</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            <div class="pull-right">
                                                 <div class="form-group">
                                                     <label for="txtZonesPageNumber">Page Number</label>
                                                     <input id="txtZonesPageNumber" class="form-control" style="width: 100px;" type="number" />
@@ -458,9 +476,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                                     </select>
                                                 </div>
                                                 <button type="submit" class="btn btn-primary form-group" style="margin-right: 0px;" onclick="refreshZones(); return false;">Go</button>
-                                            </form>
+                                            </div>
                                             <div class="clearfix"></div>
-                                        </div>
+                                        </form>
 
                                         <div style="padding: 8px;">
                                             <div class="pull-left" style="padding-top: 8px;">
@@ -481,21 +499,22 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                         <table id="tableZones" class="table table-hover">
                                             <thead>
                                                 <tr>
-                                                    <th><a href="#" onclick="sortTable('tableZonesBody', 0); return false;">#</a></th>
-                                                    <th><a href="#" onclick="sortTable('tableZonesBody', 1); return false;">Zone</a></th>
-                                                    <th><a href="#" onclick="sortTable('tableZonesBody', 2); return false;">Type</a></th>
-                                                    <th><a href="#" onclick="sortTable('tableZonesBody', 3); return false;">DNSSEC</a></th>
-                                                    <th><a href="#" onclick="sortTable('tableZonesBody', 4); return false;">Status</a></th>
-                                                    <th><a href="#" onclick="sortTable('tableZonesBody', 5); return false;">Serial</a></th>
-                                                    <th><a href="#" onclick="sortTable('tableZonesBody', 6); return false;">Expiry</a></th>
-                                                    <th><a href="#" onclick="sortTable('tableZonesBody', 7); return false;">Last Modified</a></th>
+                                                    <th style="width: 30px;"><input id="chkZonesTableCheckAll" type="checkbox" /></th>
+                                                    <th><a href="#" onclick="sortTable('tableZonesBody', 1); return false;">#</a></th>
+                                                    <th><a href="#" onclick="sortTable('tableZonesBody', 2); return false;">Zone</a></th>
+                                                    <th><a href="#" onclick="sortTable('tableZonesBody', 3); return false;">Type</a></th>
+                                                    <th><a href="#" onclick="sortTable('tableZonesBody', 4); return false;">DNSSEC</a></th>
+                                                    <th><a href="#" onclick="sortTable('tableZonesBody', 5); return false;">Status</a></th>
+                                                    <th><a href="#" onclick="sortTable('tableZonesBody', 6); return false;">Serial</a></th>
+                                                    <th><a href="#" onclick="sortTable('tableZonesBody', 7); return false;">Expiry</a></th>
+                                                    <th><a href="#" onclick="sortTable('tableZonesBody', 8); return false;">Last Modified</a></th>
                                                     <th style="width: 36px;"></th>
                                                 </tr>
                                             </thead>
                                             <tbody id="tableZonesBody"></tbody>
                                             <tfoot>
                                                 <tr>
-                                                    <td colspan="9">
+                                                    <td colspan="10">
                                                         <div>
                                                             <div class="pull-left" style="padding-top: 8px;">
                                                                 <b id="tableZonesFooterStatus">0 zones</b>
@@ -577,7 +596,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                             <div style="clear: both;"></div>
                                         </div>
 
-                                        <div class="form-inline well" style="padding: 10px 10px 0 10px;margin-bottom: 10px;">
+                                        <div class="form-inline well" style="padding: 10px 10px 0 10px; margin-bottom: 10px;">
                                             <form>
                                                 <div class="pull-left">
                                                     <div class="form-group">
@@ -972,7 +991,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                                             <div class="col-sm-6">
                                                                 <textarea id="txtDnsServerLocalEndPoints" class="form-control" rows="3" spellcheck="false"></textarea>
                                                             </div>
-                                                            <div class="col-sm-offset-3 col-sm-8" style="padding-top: 5px;">Local End Points are the network interface IP addresses and ports you want the DNS Server to listen for requests.</div>
+                                                            <div class="col-sm-offset-3 col-sm-8" style="padding-top: 5px;">Local End Points are the network interface IP addresses and ports you want the DNS Server to listen for requests. To explicitly bind the UDP sockets to interface device on Linux, specify the interface name as shown in these examples: <code>192.168.1.10%eth0:53</code> or <code>[2001:db8::1%eth1]:53</code>. For VRF, the interface name can be the VRF name.</div>
                                                         </div>
 
                                                         <div class="form-group">
@@ -1080,16 +1099,23 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                                         </div>
                                                     </div>
 
-                                                    <div id="divSettingsGeneralDnsApps" class="well well-sm form-horizontal">
+                                                    <div id="divSettingsGeneralSoftwareUpdate" class="well well-sm form-horizontal">
                                                         <div class="form-group">
-                                                            <label for="txtDefaultRecordTtl" class="col-sm-3 control-label">DNS Apps</label>
+                                                            <label class="col-sm-3 control-label">Software Update</label>
                                                             <div class="col-sm-8">
+                                                                <div class="checkbox">
+                                                                    <label>
+                                                                        <input id="chkDnsServerEnableCheckForUpdate" type="checkbox"> Enable Check For Update
+                                                                    </label>
+                                                                </div>
+                                                                <div style="padding-top: 5px; padding-left: 20px;">Enables the DNS Server to check if an update is available when the Check For Update API is called which usually occurs after a user logs into the Web Console.</div>
+
                                                                 <div class="checkbox">
                                                                     <label>
                                                                         <input id="chkDnsAppsEnableAutomaticUpdate" type="checkbox"> Enable Automatic Update
                                                                     </label>
                                                                 </div>
-                                                                <div style="padding-top: 5px; padding-left: 20px;">The DNS Server will check for DNS Apps update every day and will automatically download and install the updates.</div>
+                                                                <div style="padding-top: 5px; padding-left: 20px;">The DNS Server will check for DNS Apps update once every day and will automatically download and install the updates.</div>
                                                             </div>
                                                         </div>
                                                     </div>
@@ -1407,6 +1433,41 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                                         </div>
 
                                                         <div class="form-group">
+                                                            <label class="col-sm-3 control-label">Unix Domain Sockets (UDS)</label>
+                                                            <div class="col-sm-8">
+                                                                <div class="checkbox">
+                                                                    <label>
+                                                                        <input id="chkWebServiceEnableHttpUnixSocket" type="checkbox"> Enable HTTP Unix Domain Sockets (UDS)
+                                                                    </label>
+                                                                </div>
+                                                                <div style="padding-top: 5px; padding-left: 20px;">Enables Web Service HTTP over Unix Domain Sockets (UDS).</div>
+
+                                                                <div class="checkbox">
+                                                                    <label>
+                                                                        <input id="chkWebServiceEnableTlsUnixSocket" type="checkbox"> Enable HTTPS Unix Domain Sockets (UDS)
+                                                                    </label>
+                                                                </div>
+                                                                <div style="padding-top: 5px; padding-left: 20px;">Enables Web Service HTTPS over Unix Domain Sockets (UDS).</div>
+                                                            </div>
+                                                        </div>
+
+                                                        <div class="form-group">
+                                                            <label for="txtWebServiceHttpUnixSocket" class="col-sm-3 control-label">Web Service HTTP UDS File Path</label>
+                                                            <div class="col-sm-6">
+                                                                <input type="text" id="txtWebServiceHttpUnixSocket" class="form-control" spellcheck="false" placeholder="/path/to/http.sock">
+                                                            </div>
+                                                            <div class="col-sm-offset-3 col-sm-8" style="padding-top: 5px;">Specify the Unix Domain Sockets (UDS) file path for HTTP Web Service. Ensure that the DNS Server has read+write permissions to the parent directory to be able to create the UDS file.</div>
+                                                        </div>
+
+                                                        <div class="form-group">
+                                                            <label for="txtWebServiceTlsUnixSocket" class="col-sm-3 control-label">Web Service HTTPS UDS File Path</label>
+                                                            <div class="col-sm-6">
+                                                                <input type="text" id="txtWebServiceTlsUnixSocket" class="form-control" spellcheck="false" placeholder="/path/to/https.sock">
+                                                            </div>
+                                                            <div class="col-sm-offset-3 col-sm-8" style="padding-top: 5px;">Specify the Unix Domain Sockets (UDS) file path for HTTPS Web Service. Ensure that the DNS Server has read+write permissions to the parent directory to be able to create the UDS file.</div>
+                                                        </div>
+
+                                                        <div class="form-group">
                                                             <label class="col-sm-3 control-label">HTTPS Options</label>
                                                             <div class="col-sm-8">
                                                                 <div class="checkbox">
@@ -1461,6 +1522,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                                         </div>
 
                                                         <div class="form-group">
+                                                            <label for="txtWebServiceCspFrameAncestorsHeader" class="col-sm-3 control-label">CSP Frame Ancestors Header</label>
+                                                            <div class="col-sm-6">
+                                                                <input type="text" class="form-control" id="txtWebServiceCspFrameAncestorsHeader" placeholder="'none'" maxlength="255">
+                                                            </div>
+                                                            <div class="col-sm-offset-3 col-sm-8" style="padding-top: 5px;">The Content Security Policy (CSP) Frame Ancestors header value that must be used when serving the Web Console.</div>
+                                                        </div>
+
+                                                        <div class="form-group">
                                                             <label for="txtWebServiceTlsCertificatePath" class="col-sm-3 control-label">TLS Certificate File Path</label>
                                                             <div class="col-sm-6">
                                                                 <input type="text" class="form-control" id="txtWebServiceTlsCertificatePath" placeholder="Web Service TLS Certificate File Path On Server" maxlength="255">
@@ -1481,6 +1550,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                                             <p><b>Note!</b> When using a reverse proxy with the Web Service, you need to add <code id="lblWebServiceRealIpHeader">X-Real-IP</code> header to the proxy request with the IP address of the client to allow the Web Service to know the real IP address of the client originating the request. For example, if you are using nginx as the reverse proxy, you can add <code id="lblWebServiceRealIpNginx">proxy_set_header X-Real-IP $remote_addr;</code> to make it work.</p>
                                                             <p><b>Note!</b> The Web Service uses Kestrel web server which supports both HTTP/2 and HTTP/3 protocols when TLS certificate is configured. HTTP/3 protocol support is not available on all platforms. On Windows, it is available only on Windows 11 (build 22000 and later) and Windows Server 2022 (and later). On Linux, it requires <code>libmsquic</code> to be installed. It also requires IPv6 support on the system to work.</p>
                                                             <p><b>Note!</b> The Web Service will always bind to <code>[::]</code> local address for HTTP/3 protocol since this is how the <code>libmsquic</code> library is designed to work.</p>
+                                                            <p><b>Note!</b> Unix Domain Sockets (UDS) are supported only on Linux, Windows 10 (build 17063 and later), and Windows Server 2019 (update 1809 and later).</p>
                                                             <p>Use the following openssl command to convert your TLS certificate that is in PEM format to PKCS #12 certificate (.pfx) format:</p>
                                                             <pre>openssl pkcs12 -export -out "example.com.pfx" -inkey "privkey.pem" -in "cert.pem" -certfile "chain.pem"</pre>
                                                         </div>
@@ -1524,6 +1594,20 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
                                                                 <div class="checkbox">
                                                                     <label>
+                                                                        <input id="chkEnableDnsOverHttpUnixSocket" type="checkbox"> Enable DNS-over-HTTP Unix Domain Sockets (UDS)
+                                                                    </label>
+                                                                </div>
+                                                                <div style="padding-top: 5px; padding-left: 20px;">Enable this option to accept DNS-over-HTTP requests over Unix Domain Sockets (UDS).</div>
+
+                                                                <div class="checkbox">
+                                                                    <label>
+                                                                        <input id="chkEnableDnsOverHttpsUnixSocket" type="checkbox"> Enable DNS-over-HTTPS Unix Domain Sockets (UDS)
+                                                                    </label>
+                                                                </div>
+                                                                <div style="padding-top: 5px; padding-left: 20px;">Enable this option to accept DNS-over-HTTPS requests over Unix Domain Sockets (UDS).</div>
+
+                                                                <div class="checkbox">
+                                                                    <label>
                                                                         <input id="chkEnableDnsOverTls" type="checkbox"> Enable DNS-over-TLS
                                                                     </label>
                                                                 </div>
@@ -1553,6 +1637,18 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                                         </div>
 
                                                         <div class="form-group">
+                                                            <label class="col-sm-3 control-label">DNS-over-HTTP(s) Option</label>
+                                                            <div class="col-sm-8">
+                                                                <div class="checkbox">
+                                                                    <label>
+                                                                        <input id="chkEnableDnsOverHttpHelpRedirect" type="checkbox"> Enable Redirect To Help Page
+                                                                    </label>
+                                                                </div>
+                                                                <div style="padding-top: 5px; padding-left: 20px;">When this option is enabled, if a user visits the <code>/dns-query</code> DNS-over-HTTP(s) URL path using a web browser, the web browser will be redirected to <code>/</code> URL path to display the help page for the DNS-over-HTTP(s) service.</div>
+                                                            </div>
+                                                        </div>
+
+                                                        <div class="form-group">
                                                             <label for="txtDnsOverUdpProxyPort" class="col-sm-3 control-label">DNS-over-UDP-PROXY Port</label>
                                                             <div class="col-sm-6">
                                                                 <input type="number" class="form-control" id="txtDnsOverUdpProxyPort" placeholder="port" style="width: 100px; display: inline;">
@@ -1577,6 +1673,22 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                                                 <span>(default 80)</span>
                                                             </div>
                                                             <div class="col-sm-offset-3 col-sm-8" style="padding-top: 5px;">Specify the TCP port number for DNS-over-HTTP protocol.</div>
+                                                        </div>
+
+                                                        <div class="form-group">
+                                                            <label for="txtDnsOverHttpUnixSocket" class="col-sm-3 control-label">DNS-over-HTTP UDS File Path</label>
+                                                            <div class="col-sm-6">
+                                                                <input type="text" id="txtDnsOverHttpUnixSocket" class="form-control" spellcheck="false" placeholder="/path/to/doh.sock">
+                                                            </div>
+                                                            <div class="col-sm-offset-3 col-sm-8" style="padding-top: 5px;">Specify the Unix Domain Sockets (UDS) file path for DNS-over-HTTP protocol service. Ensure that the DNS Server has read+write permissions to the parent directory to be able to create the UDS file.</div>
+                                                        </div>
+
+                                                        <div class="form-group">
+                                                            <label for="txtDnsOverHttpsUnixSocket" class="col-sm-3 control-label">DNS-over-HTTPS UDS File Path</label>
+                                                            <div class="col-sm-6">
+                                                                <input type="text" id="txtDnsOverHttpsUnixSocket" class="form-control" spellcheck="false" placeholder="/path/to/dohs.sock">
+                                                            </div>
+                                                            <div class="col-sm-offset-3 col-sm-8" style="padding-top: 5px;">Specify the Unix Domain Sockets (UDS) file path for DNS-over-HTTPS protocol service. Ensure that the DNS Server has read+write permissions to the parent directory to be able to create the UDS file.</div>
                                                         </div>
 
                                                         <div class="form-group">
@@ -1640,11 +1752,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
                                                         <div>
                                                             <p><b>Note!</b> These optional DNS Server protocol changes will be automatically applied and so you do not need to manually restart the main service. The TLS certificate too will be automatically reloaded when the certificate file's date modified property on disk changes. The DNS-over-TLS, DNS-over-QUIC, and DNS-over-HTTPS protocols will be enabled only when a TLS certificate is configured.</p>
-                                                            <p>These optional DNS Server protocols are used to host these as a service. You do not need to enable these optional protocols to use them with Forwarders or Conditional Forwarder Zones.</p>
-                                                            <p>For DNS-over-HTTP, use <code>http://<span id="lblDoHHost">localhost:8053</span>/dns-query</code> with a TLS terminating reverse proxy like nginx. For DNS-over-TLS, use <code id="lblDoTHost">tls-certificate-domain:853</code>, for DNS-over-QUIC, use <code id="lblDoQHost">tls-certificate-domain:853</code>, and for DNS-over-HTTPS use <code>https://<span id="lblDoHsHost">tls-certificate-domain</span>/dns-query</code> to configure supported DNS clients.</p>
-                                                            <p>When using a reverse proxy with the DNS-over-HTTP service, you need to add <code id="lblDnsOverHttpRealIpHeader">X-Real-IP</code> header to the proxy request with the IP address of the client to allow the DNS Server to know the real IP address of the client originating the request. For example, if you are using nginx as the reverse proxy, you can add <code id="lblDnsOverHttpRealIpNginx">proxy_set_header X-Real-IP $remote_addr;</code> to make it work.</p>
-                                                            <p>DNS-over-QUIC protocol support is not available on all platforms. On Windows, it is available only on Windows 11 (build 22000 and later) and Windows Server 2022 (and later). On Linux, it requires <code>libmsquic</code> to be installed. It also requires IPv6 support on the system to work.</p>
+                                                            <p><b>Note!</b> These optional DNS Server protocols are used to host these as a service. You do not need to enable these optional protocols to use them with Forwarders or Conditional Forwarder Zones.</p>
+                                                            <p><b>Note!</b> For DNS-over-HTTP, use <code>http://<span id="lblDoHHost">localhost:8053</span>/dns-query</code> with a TLS terminating reverse proxy like nginx. For DNS-over-TLS, use <code id="lblDoTHost">tls-certificate-domain:853</code>, for DNS-over-QUIC, use <code id="lblDoQHost">tls-certificate-domain:853</code>, and for DNS-over-HTTPS use <code>https://<span id="lblDoHsHost">tls-certificate-domain</span>/dns-query</code> to configure supported DNS clients.</p>
+                                                            <p><b>Note!</b> When using a reverse proxy with the DNS-over-HTTP service, you need to add <code id="lblDnsOverHttpRealIpHeader">X-Real-IP</code> header to the proxy request with the IP address of the client to allow the DNS Server to know the real IP address of the client originating the request. For example, if you are using nginx as the reverse proxy, you can add <code id="lblDnsOverHttpRealIpNginx">proxy_set_header X-Real-IP $remote_addr;</code> to make it work.</p>
+                                                            <p><b>Note!</b> DNS-over-QUIC protocol support is not available on all platforms. On Windows, it is available only on Windows 11 (build 22000 and later) and Windows Server 2022 (and later). On Linux, it requires <code>libmsquic</code> to be installed. It also requires IPv6 support on the system to work.</p>
                                                             <p><b>Note!</b> The DNS-over-HTTP/3 protocol will always bind to <code>[::]</code> local address since this is how the <code>libmsquic</code> library is designed to work.</p>
+                                                            <p><b>Note!</b> Unix Domain Sockets (UDS) are supported only on Linux, Windows 10 (build 17063 and later), and Windows Server 2019 (update 1809 and later).</p>
                                                             <p>Use the following openssl command to convert your TLS certificate that is in PEM format to PKCS #12 certificate (.pfx) format:</p>
                                                             <pre>openssl pkcs12 -export -out "example.com.pfx" -inkey "privkey.pem" -in "cert.pem" -certfile "chain.pem"</pre>
                                                         </div>
@@ -1740,6 +1853,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                                                     </label>
                                                                 </div>
                                                                 <div style="padding-top: 5px; padding-left: 20px;">Enables <a href="https://datatracker.ietf.org/doc/rfc9156/" target="_blank">QNAME minimization</a> for recursive resolution to improve privacy.</div>
+
+                                                                <div class="checkbox">
+                                                                    <label>
+                                                                        <input id="chkLocallyServedDnsZones" type="checkbox"> Locally Served DNS Zones
+                                                                    </label>
+                                                                </div>
+                                                                <div style="padding-top: 5px; padding-left: 20px;">Enables <a href="https://datatracker.ietf.org/doc/rfc6303/" target="_blank">Locally Served DNS Zones</a> and <a href="https://datatracker.ietf.org/doc/rfc6761/" target="_blank">Special-Use Domain Names</a> for recursive resolution to avoid leakage of queries and reduce load on the root servers. Create a Stub or Conditional Forwarder zone for each domain name that you want to resolve externally.</div>
                                                             </div>
                                                         </div>
 
@@ -2280,7 +2400,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                                                         <input id="chkIgnoreResolverLogs" type="checkbox"> Ignore Resolver Error Logs
                                                                     </label>
                                                                 </div>
-                                                                <div style="padding-top: 5px; padding-left: 20px;">Enable this option to stop logging domain name resolution errors into the log file.</div>
+                                                                <div style="padding-top: 5px; padding-left: 20px;">Enable this option to stop logging domain name resolution errors.</div>
+
+                                                                <div class="checkbox">
+                                                                    <label>
+                                                                        <input id="chkNoStackTrace" type="checkbox"> No Stack Trace
+                                                                    </label>
+                                                                </div>
+                                                                <div style="padding-top: 5px; padding-left: 20px;">Enable to log only short error messages instead of full exception stack trace.</div>
 
                                                                 <div class="checkbox">
                                                                     <label>
@@ -2348,7 +2475,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
                                             <div class="form-group" style="margin-bottom: 0px;">
                                                 <div class="pull-left">
-                                                    <button type="button" class="btn btn-primary" data-loading-text="Saving..." onclick="saveDnsSettings(this);">Save Settings</button>
+                                                    <button id="btnSaveSettings" type="button" class="btn btn-primary" data-loading-text="Saving..." onclick="saveDnsSettings(this);">Save Settings</button>
                                                     <button id="btnSettingsFlushCache" type="button" class="btn btn-danger" data-loading-text="Flushing..." onclick="flushDnsCache(this, $('#optSettingsClusterNode').val());" style="margin-left: 6px;">Flush Cache</button>
                                                 </div>
                                                 <div class="pull-right">
@@ -3036,7 +3163,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                                                 </thead>
                                                                 <tbody id="tableAdminSsoGroupMap"></tbody>
                                                             </table>
-                                                            <div style="padding-top: 5px;">Map Remote Groups at Single Sign-On (SSO) provider to Local Groups for both new and existing users signed up via Single Sign-On (SSO). A SSO user's group membership will be automatically synced to the mapped Local Groups each time they log in. If your SSO provider does not include group membership claim by default then you will have to add <code>group</code> or <code>roles</code> scope in the <b>Scopes</b> option above as required by the SSO provider.</div>
+                                                            <div style="padding-top: 5px;">Map Remote Groups at Single Sign-On (SSO) provider to Local Groups for both new and existing users signed up via Single Sign-On (SSO). A SSO user's group membership will be automatically synced to the mapped Local Groups each time they log in. If your SSO provider does not include group membership claim by default then you will have to add <code>groups</code> or <code>roles</code> scope in the <b>Scopes</b> option above as required by the SSO provider.</div>
                                                         </div>
                                                     </div>
 
@@ -3048,6 +3175,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
                                                         <p><b>Note!</b> When Group Map is configured, the Single Sign-On (SSO) user's group membership cannot be managed locally and any group membership changes must be configured at the SSO provider itself. SSO users need to relogin so that any group membership changes made at SSO provider are applied to their user accounts. The Group Map thus allows managing user access centrally via the SSO provider. Keep the Group Map empty if group membership management for SSO users is required to be managed via the DNS Server itself.</p>
                                                         <p><b>Note!</b> The Web Service will be automatically restarted to apply these changes thus there is no need to restart the DNS Server manually.</p>
                                                         <p><b>Note!</b> When using a reverse proxy with the Web Service, you need to add <code>X-Forwarded-Proto</code> and <code>X-Forwarded-Host</code> headers to proxy request to allow the Web Service to correctly form the SSO Redirect URI. If the reverse proxy is setup to use a path prefix then make sure to add the <code>X-Forwarded-Prefix</code> header to proxy request too. These headers will be read only if the reverse proxy IP address is configured to be allowed in the <b>Reverse Proxy Addresses</b> option in Settings > Web Service section. For example, if you are using nginx as the reverse proxy with a path prefix of <code>/dns</code>, then you should add the following headers: <code>proxy_set_header X-Forwarded-Proto $scheme;</code>, <code>proxy_set_header X-Forwarded-Host $host;</code>, <code>proxy_set_header X-Forwarded-Prefix /dns;</code>, and <code>proxy_redirect / /dns/;</code></p>
+                                                        <p><b>Note!</b> Domain names in all of the URLs configured above will be resolved by the DNS Server internally only. Thus, make sure that the DNS Server is able to resolve the domain name in the URL. Adding <code>hosts</code> file entries in the host OS will not work.</p>
                                                         <p><b>Warning!</b> All URLs configured above must use <code>https</code> URL scheme for production environments. Using <code>http</code> URL scheme is not secure and should be used only for testing purposes.</p>
                                                         <p><b>Warning!</b> Any DNS related failure may cause Single Sign-On (SSO) to fail to work making it impossible for SSO users to log in to fix the DNS issue due to circular dependency. Thus, it is recommended to maintain a local administrator user account for such scenarios.</p>
                                                     </div>
@@ -3249,12 +3377,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
                                                 <div class="form-group">
                                                     <label for="txtQueryLogQName">Domain</label>
-                                                    <input id="txtQueryLogQName" type="text" class="form-control" style="min-width: 300px;" />
+                                                    <input id="txtQueryLogQName" type="text" class="form-control" style="min-width: 300px;" placeholder="example.com or *.com" />
                                                 </div>
 
                                                 <div class="form-group">
                                                     <label for="txtQueryLogQType">Type</label>
-                                                    <input id="txtQueryLogQType" type="text" class="form-control" />
+                                                    <input id="txtQueryLogQType" type="text" class="form-control" placeholder="A, AAAA, etc." />
                                                 </div>
 
                                                 <div class="form-group">

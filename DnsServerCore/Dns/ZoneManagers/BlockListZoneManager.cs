@@ -166,11 +166,14 @@ namespace DnsServerCore.Dns.ZoneManagers
             }
             catch (FileNotFoundException)
             {
-                SaveConfigFileInternal();
+                lock (_saveLock)
+                {
+                    SaveConfigFileInternal();
+                }
             }
             catch (Exception ex)
             {
-                _dnsServer.LogManager.Write("DNS Server encountered an error while loading block list config file: " + blockListConfigFile + "\r\n" + ex.ToString());
+                _dnsServer.LogManager.Write("DNS Server encountered an error while loading block list config file: " + blockListConfigFile, ex);
             }
         }
 
@@ -470,7 +473,7 @@ namespace DnsServerCore.Dns.ZoneManagers
             }
             catch (Exception ex)
             {
-                _dnsServer.LogManager.Write("DNS Server failed to read " + (isAllowList ? "allow" : "block") + " list from: " + listUrl.AbsoluteUri + "\r\n" + ex.ToString());
+                _dnsServer.LogManager.Write("DNS Server failed to read " + (isAllowList ? "allow" : "block") + " list from: " + listUrl.AbsoluteUri, ex);
             }
 
             return domains;
@@ -596,21 +599,21 @@ namespace DnsServerCore.Dns.ZoneManagers
                             if (File.Exists(listFilePath))
                                 http.DefaultRequestHeaders.IfModifiedSince = File.GetLastWriteTimeUtc(listFilePath);
 
-                            http.Timeout = TimeSpan.FromMinutes(5);
                             http.DefaultRequestHeaders.UserAgent.TryParseAdd("Technitium DNS Server");
 
-                            HttpResponseMessage httpResponse = await http.GetAsync(listUrl);
+                            HttpResponseMessage httpResponse = await http.GetAsync(listUrl, HttpCompletionOption.ResponseHeadersRead);
                             switch (httpResponse.StatusCode)
                             {
                                 case HttpStatusCode.OK:
                                     {
                                         string listDownloadFilePath = listFilePath + ".downloading";
 
-                                        using (FileStream fS = new FileStream(listDownloadFilePath, FileMode.Create, FileAccess.Write))
+                                        await using (FileStream fS = new FileStream(listDownloadFilePath, FileMode.Create, FileAccess.Write))
                                         {
-                                            using (Stream httpStream = await httpResponse.Content.ReadAsStreamAsync())
+                                            await using (Stream httpStream = await httpResponse.Content.ReadAsStreamAsync())
                                             {
-                                                await httpStream.CopyToAsync(fS);
+                                                //copy stream with idle timeout
+                                                await httpStream.CopyToAsync(fS, TimeSpan.FromSeconds(60));
                                             }
                                         }
 
@@ -639,7 +642,7 @@ namespace DnsServerCore.Dns.ZoneManagers
                 }
                 catch (Exception ex)
                 {
-                    _dnsServer.LogManager.Write("DNS Server failed to download " + (isAllowList ? "allow" : "block") + " list and will use previously downloaded file (if available): " + listUrl.AbsoluteUri + "\r\n" + ex.ToString());
+                    _dnsServer.LogManager.Write("DNS Server failed to download " + (isAllowList ? "allow" : "block") + " list and will use previously downloaded file (if available): " + listUrl.AbsoluteUri, ex);
                 }
             }
 
@@ -714,7 +717,7 @@ namespace DnsServerCore.Dns.ZoneManagers
                     }
                     catch (Exception ex)
                     {
-                        _dnsServer.LogManager.Write("DNS Server encountered an error while updating block lists.\r\n" + ex.ToString());
+                        _dnsServer.LogManager.Write("DNS Server encountered an error while updating block lists.", ex);
                     }
                     finally
                     {

@@ -581,7 +581,7 @@ namespace DnsServerCore.Dhcp
             else if (string.IsNullOrWhiteSpace(request.ClientFullyQualifiedDomainName.DomainName))
             {
                 //client domain empty and expects server for a fqdn domain name
-                if (request.HostName is null)
+                if ((request.HostName is null) || string.IsNullOrWhiteSpace(request.HostName.HostName))
                     return null; //server unable to decide a name for client
 
                 clientDomainName = DhcpServer.GetSanitizedHostName(request.HostName.HostName) + "." + _domainName;
@@ -1306,7 +1306,7 @@ namespace DnsServerCore.Dhcp
                             value = value.Trim();
                             value = value.Trim('"');
 
-                            if (request.VendorClassIdentifier.Identifier.Substring(startIndex, length).Equals(value))
+                            if (request.VendorClassIdentifier.Identifier.Substring(startIndex, length).Equals(value, StringComparison.Ordinal))
                             {
                                 options.Add(new VendorClassIdentifierOption(value));
                                 options.Add(entry.Value);
@@ -1362,12 +1362,16 @@ namespace DnsServerCore.Dhcp
             _leases[lease.ClientIdentifier] = lease;
             _offers.TryRemove(lease.ClientIdentifier, out _);
 
+            _dhcpServer.AddDnsEntries(this, lease);
+
             _lastModified = DateTime.UtcNow;
         }
 
         internal void ReleaseLease(Lease lease)
         {
             _leases.TryRemove(lease.ClientIdentifier, out _);
+
+            _dhcpServer.RemoveDnsEntries(this, lease);
 
             _lastModified = DateTime.UtcNow;
         }
@@ -1397,9 +1401,9 @@ namespace DnsServerCore.Dhcp
             }
         }
 
-        internal List<Lease> RemoveExpiredLeases()
+        internal int RemoveExpiredLeases()
         {
-            List<Lease> expiredLeases = new List<Lease>();
+            int expiredLeases = 0;
             DateTime utcNow = DateTime.UtcNow;
 
             foreach (KeyValuePair<ClientIdentifierOption, Lease> lease in _leases)
@@ -1408,12 +1412,15 @@ namespace DnsServerCore.Dhcp
                 {
                     //lease expired
                     if (_leases.TryRemove(lease.Key, out Lease expiredLease))
-                        expiredLeases.Add(expiredLease);
+                    {
+                        expiredLeases++;
+                        _dhcpServer.RemoveDnsEntries(this, expiredLease);
+                    }
                 }
             }
 
-            if (expiredLeases.Count > 0)
-                _lastModified = DateTime.UtcNow;
+            if (expiredLeases > 0)
+                _lastModified = utcNow;
 
             return expiredLeases;
         }
@@ -1501,7 +1508,7 @@ namespace DnsServerCore.Dhcp
 
             foreach (KeyValuePair<ClientIdentifierOption, Lease> entry in _leases)
             {
-                if (BinaryNumber.Equals(entry.Value.HardwareAddress, hardwareAddressBytes))
+                if (entry.Value.HardwareAddress.SequenceEqual(hardwareAddressBytes))
                     return RemoveLease(entry.Key);
             }
 
@@ -1547,7 +1554,7 @@ namespace DnsServerCore.Dhcp
             {
                 Lease lease = entry.Value;
 
-                if ((lease.Type == LeaseType.Dynamic) && BinaryNumber.Equals(lease.HardwareAddress, hardwareAddressBytes))
+                if ((lease.Type == LeaseType.Dynamic) && lease.HardwareAddress.SequenceEqual(hardwareAddressBytes))
                 {
                     ConvertToReservedLease(lease);
                     return;
@@ -1573,7 +1580,7 @@ namespace DnsServerCore.Dhcp
             {
                 Lease lease = entry.Value;
 
-                if ((lease.Type == LeaseType.Reserved) && BinaryNumber.Equals(lease.HardwareAddress, hardwareAddressBytes))
+                if ((lease.Type == LeaseType.Reserved) && lease.HardwareAddress.SequenceEqual(hardwareAddressBytes))
                 {
                     ConvertToDynamicLease(lease);
                     return;
@@ -2182,7 +2189,7 @@ namespace DnsServerCore.Dhcp
                         {
                             if (existingReservedLease.ClientIdentifier.Equals(reservedLease.ClientIdentifier))
                             {
-                                domainNameMatches = (existingReservedLease.HostName is null) || existingReservedLease.HostName.Equals(reservedLease.HostName);
+                                domainNameMatches = (existingReservedLease.HostName is null) || existingReservedLease.HostName.Equals(reservedLease.HostName, StringComparison.Ordinal);
                                 break;
                             }
                         }

@@ -47,8 +47,6 @@ namespace DnsServerCore.Dns.Zones
     {
         #region variables
 
-        readonly bool _internal;
-
         Dictionary<ushort, DnssecPrivateKey> _dnssecPrivateKeys;
         const uint DNSSEC_SIGNATURE_INCEPTION_OFFSET = 60 * 60;
 
@@ -79,19 +77,14 @@ namespace DnsServerCore.Dns.Zones
             InitRecordExpiry();
         }
 
-        public PrimaryZone(DnsServer dnsServer, string name, bool @internal, bool useSoaSerialDateScheme)
+        public PrimaryZone(DnsServer dnsServer, string name, bool useSoaSerialDateScheme)
             : base(dnsServer, name)
         {
-            _internal = @internal;
+            InitNotify();
+            InitRecordExpiry();
 
-            if (!_internal)
-            {
-                InitNotify();
-                InitRecordExpiry();
-
-                ZoneTransfer = AuthZoneTransfer.AllowOnlyZoneNameServers;
-                Notify = AuthZoneNotify.ZoneNameServers;
-            }
+            ZoneTransfer = AuthZoneTransfer.AllowOnlyZoneNameServers;
+            Notify = AuthZoneNotify.ZoneNameServers;
 
             string rp;
 
@@ -116,8 +109,6 @@ namespace DnsServerCore.Dns.Zones
         internal PrimaryZone(DnsServer dnsServer, string name, DnsSOARecordData soa, DnsNSRecordData ns)
             : base(dnsServer, name)
         {
-            _internal = true;
-
             _entries[DnsResourceRecordType.SOA] = [new DnsResourceRecord(_name, DnsResourceRecordType.SOA, DnsClass.IN, soa.Minimum, soa)];
             _entries[DnsResourceRecordType.NS] = [new DnsResourceRecord(_name, DnsResourceRecordType.NS, DnsClass.IN, dnsServer.AuthZoneManager.DefaultNsRecordTtl, ns)];
         }
@@ -2507,21 +2498,6 @@ namespace DnsServerCore.Dns.Zones
 
         #endregion
 
-        #region versioning
-
-        internal override void CommitAndIncrementSerial(IReadOnlyList<DnsResourceRecord> deletedRecords = null, IReadOnlyList<DnsResourceRecord> addedRecords = null)
-        {
-            if (_internal)
-            {
-                _lastModified = DateTime.UtcNow;
-                return;
-            }
-
-            base.CommitAndIncrementSerial(deletedRecords, addedRecords);
-        }
-
-        #endregion
-
         #region public
 
         public override string GetZoneTypeName()
@@ -2595,10 +2571,7 @@ namespace DnsServerCore.Dns.Zones
                     uint oldSoaMinimum = GetZoneSoaMinimum();
 
                     //setting new SOA
-                    if (_internal)
-                        _entries[DnsResourceRecordType.SOA] = records; //update SOA directly
-                    else
-                        CommitAndIncrementSerial(null, records);
+                    CommitAndIncrementSerial(null, records);
 
                     if (oldSoaMinimum != newSoa.Minimum)
                     {
@@ -2828,26 +2801,11 @@ namespace DnsServerCore.Dns.Zones
             }
         }
 
-        public override AuthZoneTransfer ZoneTransfer
-        {
-            get { return base.ZoneTransfer; }
-            set
-            {
-                if (_internal)
-                    throw new InvalidOperationException();
-
-                base.ZoneTransfer = value;
-            }
-        }
-
         public override AuthZoneNotify Notify
         {
             get { return base.Notify; }
             set
             {
-                if (_internal)
-                    throw new InvalidOperationException();
-
                 switch (value)
                 {
                     case AuthZoneNotify.SeparateNameServersForCatalogAndMemberZones:
@@ -2857,21 +2815,6 @@ namespace DnsServerCore.Dns.Zones
                 base.Notify = value;
             }
         }
-
-        public override AuthZoneUpdate Update
-        {
-            get { return base.Update; }
-            set
-            {
-                if (_internal)
-                    throw new InvalidOperationException();
-
-                base.Update = value;
-            }
-        }
-
-        public bool Internal
-        { get { return _internal; } }
 
         public IReadOnlyCollection<DnssecPrivateKey> DnssecPrivateKeys
         {

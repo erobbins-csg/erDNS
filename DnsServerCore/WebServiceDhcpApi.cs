@@ -663,7 +663,7 @@ namespace DnsServerCore
                     _dnsWebService._log.Write(_dnsWebService.GetRemoteEndPoint(context), "[" + sessionUser.Username + "] DHCP scope was added successfully: " + scopeName);
                 }
 
-                if (request.TryGetQueryOrForm("newName", out string newName) && !newName.Equals(scopeName))
+                if (request.TryGetQueryOrForm("newName", out string newName) && !newName.Equals(scopeName, StringComparison.Ordinal))
                 {
                     _dnsWebService._dhcpServer.RenameScope(scopeName, newName);
 

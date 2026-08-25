@@ -1,6 +1,6 @@
 ﻿/*
 Technitium DNS Server
-Copyright (C) 2024  Shreyas Zare (shreyas@technitium.com)
+Copyright (C) 2026  Shreyas Zare (shreyas@technitium.com)
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -28,11 +28,11 @@ namespace GeoDistance
     {
         #region variables
 
-        static MaxMind _maxMind;
+        static MaxMind? _maxMind;
 
         readonly DatabaseReader _mmCityReader;
-        readonly DatabaseReader _mmIspReader;
-        readonly DatabaseReader _mmAsnReader;
+        readonly DatabaseReader? _mmIspReader;
+        readonly DatabaseReader? _mmAsnReader;
 
         #endregion
 
@@ -108,10 +108,10 @@ namespace GeoDistance
         public DatabaseReader CityReader
         { get { return _mmCityReader; } }
 
-        public DatabaseReader IspReader
+        public DatabaseReader? IspReader
         { get { return _mmIspReader; } }
 
-        public DatabaseReader AsnReader
+        public DatabaseReader? AsnReader
         { get { return _mmAsnReader; } }
 
         #endregion

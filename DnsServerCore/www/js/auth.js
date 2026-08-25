@@ -42,8 +42,7 @@ $(function () {
             token = localStorage.getItem("token");
 
         if (token == null) {
-            showPageLogin();
-            login("admin", "admin");
+            showPageLogin(true);
         }
         else {
             HTTPRequest({
@@ -64,11 +63,17 @@ $(function () {
                     showPageMain();
                 },
                 error: function () {
-                    showPageLogin();
+                    showPageLogin(true);
                 }
             });
         }
     }
+
+    $("#txt2FATOTP").on("input", function () {
+        var totp = $("#txt2FATOTP").val();
+        if (totp.length == 6)
+            login();
+    });
 
     $("#optGroupDetailsUserList").on("change", function () {
         var selectedUser = $("#optGroupDetailsUserList").val();

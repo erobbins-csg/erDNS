@@ -186,10 +186,14 @@ namespace BlockPage
             DateTime _webServerTlsCertificateLastModifiedOn;
 
             readonly ConcurrentDictionary<string, SslServerAuthenticationOptions> _certCache = new ConcurrentDictionary<string, SslServerAuthenticationOptions>();
+            readonly ConcurrentDictionary<string, Task<SslServerAuthenticationOptions>> _certSigningTasks = new ConcurrentDictionary<string, Task<SslServerAuthenticationOptions>>();
 
             Timer? _tlsCertificateUpdateTimer;
             const int TLS_CERTIFICATE_UPDATE_TIMER_INITIAL_INTERVAL = 60000;
             const int TLS_CERTIFICATE_UPDATE_TIMER_INTERVAL = 60000;
+
+            string? _cachedIndexPage;
+            DateTime? _cachedIndexPageLastModified;
 
             #endregion
 
@@ -260,7 +264,7 @@ namespace BlockPage
                             serverOptions.Listen(webServiceLocalAddress, 443, delegate (ListenOptions listenOptions)
                             {
                                 listenOptions.Protocols = HttpProtocols.Http1AndHttp2;
-                                listenOptions.UseHttps(delegate (SslStream stream, SslClientHelloInfo clientHelloInfo, object? state, CancellationToken cancellationToken)
+                                listenOptions.UseHttps(async delegate (SslStream stream, SslClientHelloInfo clientHelloInfo, object? state, CancellationToken cancellationToken)
                                 {
                                     if (_webServerEnableOnlineCertificateSigning)
                                     {
@@ -269,10 +273,55 @@ namespace BlockPage
                                             string sniDomain = clientHelloInfo.ServerName.ToLowerInvariant();
                                             if (sniDomain is not null)
                                             {
-                                                if (!_certCache.TryGetValue(sniDomain, out SslServerAuthenticationOptions? sslServerAuthenticationOptions))
+                                                DateTimeOffset utcNow = DateTimeOffset.UtcNow;
+
+                                                if (_certCache.TryGetValue(sniDomain, out SslServerAuthenticationOptions? sslServerAuthenticationOptions) && (utcNow.AddMinutes(30) < sslServerAuthenticationOptions!.ServerCertificateContext!.TargetCertificate.NotAfter))
+                                                    return sslServerAuthenticationOptions;
+
+                                                TaskCompletionSource<SslServerAuthenticationOptions> signingTaskCompletionSource = new TaskCompletionSource<SslServerAuthenticationOptions>();
+                                                Task<SslServerAuthenticationOptions> signingTask = _certSigningTasks.GetOrAdd(sniDomain, signingTaskCompletionSource.Task);
+
+                                                if (!signingTask.Equals(signingTaskCompletionSource.Task))
+                                                    return await signingTask; //await existing task
+
+                                                //got new signing task added; do the task
+                                                try
                                                 {
-                                                    RSA rsa = RSA.Create(2048);
-                                                    CertificateRequest req = new CertificateRequest("cn=" + sniDomain, rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+                                                    X509Certificate2 caCert = _sslServerAuthenticationOptions!.ServerCertificateContext!.TargetCertificate;
+
+                                                    ECDsa? ecdsa = null;
+                                                    RSA? rsa = null;
+                                                    CertificateRequest req;
+                                                    X509SignatureGenerator generator;
+
+                                                    ECDsa? caECDsaPrivateKey = caCert.GetECDsaPrivateKey();
+                                                    if (caECDsaPrivateKey is not null)
+                                                    {
+                                                        ECCurve caCurve = caECDsaPrivateKey.ExportParameters(false).Curve;
+                                                        ecdsa = ECDsa.Create(caCurve);
+                                                        req = new CertificateRequest("cn=" + sniDomain, ecdsa, HashAlgorithmName.SHA256);
+                                                        generator = X509SignatureGenerator.CreateForECDsa(caECDsaPrivateKey);
+                                                    }
+                                                    else
+                                                    {
+                                                        RSA? caRsaPrivateKey = caCert.GetRSAPrivateKey();
+                                                        if (caRsaPrivateKey is not null)
+                                                        {
+                                                            rsa = RSA.Create(2048);
+                                                            req = new CertificateRequest("cn=" + sniDomain, rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+                                                            generator = X509SignatureGenerator.CreateForRSA(caRsaPrivateKey, RSASignaturePadding.Pkcs1);
+                                                        }
+                                                        else
+                                                        {
+                                                            //algorithm not supported; return ca cert directly
+                                                            _certCache[sniDomain] = _sslServerAuthenticationOptions;
+
+                                                            //release any awaiting task
+                                                            signingTaskCompletionSource.SetResult(_sslServerAuthenticationOptions);
+
+                                                            return _sslServerAuthenticationOptions;
+                                                        }
+                                                    }
 
                                                     req.CertificateExtensions.Add(new X509BasicConstraintsExtension(false, false, 0, true));
                                                     req.CertificateExtensions.Add(new X509KeyUsageExtension(X509KeyUsageFlags.DigitalSignature | X509KeyUsageFlags.KeyEncipherment, true));
@@ -283,22 +332,46 @@ namespace BlockPage
 
                                                     req.CertificateExtensions.Add(san.Build());
 
+                                                    DateTimeOffset certNotBefore = utcNow.AddMinutes(-30);
+                                                    if (certNotBefore < caCert.NotBefore)
+                                                        certNotBefore = caCert.NotBefore;
+
                                                     Span<byte> serial = stackalloc byte[16];
                                                     RandomNumberGenerator.Fill(serial);
 
-                                                    X509Certificate2 newCert = req.Create(_sslServerAuthenticationOptions!.ServerCertificateContext!.TargetCertificate, DateTime.UtcNow.AddMinutes(-30), DateTime.UtcNow.AddDays(7), serial);
-                                                    newCert = newCert.CopyWithPrivateKey(rsa);
+                                                    X509Certificate2 newCert = req.Create(caCert.SubjectName, generator, certNotBefore, utcNow.AddDays(7), serial);
+
+                                                    if (ecdsa is not null)
+                                                        newCert = newCert.CopyWithPrivateKey(ecdsa);
+                                                    else if (rsa is not null)
+                                                        newCert = newCert.CopyWithPrivateKey(rsa);
+
                                                     newCert = X509CertificateLoader.LoadPkcs12(newCert.Export(X509ContentType.Pfx), null, X509KeyStorageFlags.PersistKeySet);
 
                                                     sslServerAuthenticationOptions = new SslServerAuthenticationOptions()
                                                     {
-                                                        ServerCertificateContext = SslStreamCertificateContext.Create(newCert, null, false)
+                                                        ServerCertificateContext = SslStreamCertificateContext.Create(newCert, new X509Certificate2Collection(caCert), false)
                                                     };
 
                                                     _certCache[sniDomain] = sslServerAuthenticationOptions;
-                                                }
 
-                                                return ValueTask.FromResult(sslServerAuthenticationOptions);
+                                                    //release any awaiting task
+                                                    signingTaskCompletionSource.SetResult(sslServerAuthenticationOptions);
+
+                                                    return sslServerAuthenticationOptions;
+                                                }
+                                                catch (Exception ex)
+                                                {
+                                                    //release any awaiting task with exception
+                                                    signingTaskCompletionSource.SetException(ex);
+
+                                                    throw;
+                                                }
+                                                finally
+                                                {
+                                                    //ensure removal of signing task
+                                                    _certSigningTasks.TryRemove(sniDomain, out _);
+                                                }
                                             }
                                         }
                                         catch (Exception ex)
@@ -307,7 +380,7 @@ namespace BlockPage
                                         }
                                     }
 
-                                    return ValueTask.FromResult(_sslServerAuthenticationOptions);
+                                    return _sslServerAuthenticationOptions;
                                 }, null!);
                             });
                         }
@@ -324,6 +397,18 @@ namespace BlockPage
                 _webServer.UseResponseCompression();
 
                 _webServer.UseDefaultFiles();
+
+                if (_serveBlockPageFromWebServerRoot)
+                {
+                    _webServer.Use(async delegate (HttpContext context, RequestDelegate next)
+                    {
+                        if (HttpMethods.IsGet(context.Request.Method) && (context.Request.Path.Equals("/") || context.Request.Path.Equals("/index.html", StringComparison.OrdinalIgnoreCase)))
+                            await ServeDefaultPageAsync(context, next);
+                        else
+                            await next(context);
+                    });
+                }
+
                 _webServer.UseStaticFiles(new StaticFileOptions()
                 {
                     OnPrepareResponse = delegate (StaticFileResponseContext ctx)
@@ -435,7 +520,7 @@ namespace BlockPage
                             }
                             catch (Exception ex)
                             {
-                                _dnsServer.WriteLog("Web server '" + _name + "' encountered an error while updating TLS Certificate: " + _webServerTlsCertificateFilePath + "\r\n" + ex.ToString());
+                                _dnsServer.WriteLog("Web server '" + _name + "' encountered an error while updating TLS Certificate: " + _webServerTlsCertificateFilePath, ex);
                             }
                         }
 
@@ -461,7 +546,34 @@ namespace BlockPage
 
             private async Task ServeDefaultPageAsync(HttpContext context, RequestDelegate next)
             {
-                string blockPageContent = _blockPageContent!;
+                string blockPageContent;
+
+                if (_serveBlockPageFromWebServerRoot)
+                {
+                    string indexFilePath = Path.Combine(_webServerRootPath!, "index.html");
+                    FileInfo fileInfo = new FileInfo(indexFilePath);
+
+                    if (fileInfo.Exists)
+                    {
+                        DateTime lastModified = fileInfo.LastWriteTimeUtc;
+
+                        if ((_cachedIndexPage is null) || (lastModified > _cachedIndexPageLastModified))
+                        {
+                            _cachedIndexPage = await File.ReadAllTextAsync(indexFilePath);
+                            _cachedIndexPageLastModified = lastModified;
+                        }
+
+                        blockPageContent = _cachedIndexPage;
+                    }
+                    else
+                    {
+                        blockPageContent = _blockPageContent!;
+                    }
+                }
+                else
+                {
+                    blockPageContent = _blockPageContent!;
+                }
 
                 if (_includeBlockingInfo)
                 {
@@ -473,7 +585,31 @@ namespace BlockPage
                         if (host is not null)
                         {
                             DnsDatagram dnsRequest = new DnsDatagram(0, false, DnsOpcode.StandardQuery, false, false, true, false, false, false, DnsResponseCode.NoError, [new DnsQuestionRecord(host, DnsResourceRecordType.A, DnsClass.IN)], udpPayloadSize: DnsDatagram.EDNS_DEFAULT_UDP_PAYLOAD_SIZE);
-                            DnsDatagram dnsResponse = await _dnsServer.DirectQueryAsync(dnsRequest, 500);
+
+                            IPEndPoint clientEP;
+                            {
+                                try
+                                {
+                                    IPAddress? remoteIP = context.Connection.RemoteIpAddress;
+                                    if (remoteIP is not null)
+                                    {
+                                        if (remoteIP.IsIPv4MappedToIPv6)
+                                            remoteIP = remoteIP.MapToIPv4();
+
+                                        clientEP = new IPEndPoint(remoteIP, context.Connection.RemotePort);
+                                    }
+                                    else
+                                    {
+                                        clientEP = new IPEndPoint(IPAddress.Any, 0);
+                                    }
+                                }
+                                catch
+                                {
+                                    clientEP = new IPEndPoint(IPAddress.Any, 0);
+                                }
+                            }
+
+                            DnsDatagram dnsResponse = await _dnsServer.DirectQueryAsync(dnsRequest, clientEP, 500);
 
                             List<EDnsExtendedDnsErrorOptionData> options = new List<EDnsExtendedDnsErrorOptionData>();
 

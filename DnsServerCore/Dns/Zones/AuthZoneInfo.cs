@@ -1973,24 +1973,6 @@ namespace DnsServerCore.Dns.Zones
             }
         }
 
-        public bool Internal
-        {
-            get
-            {
-                if (_apexZone is null)
-                    throw new InvalidOperationException();
-
-                switch (_type)
-                {
-                    case AuthZoneType.Primary:
-                        return (_apexZone as PrimaryZone).Internal;
-
-                    default:
-                        return false;
-                }
-            }
-        }
-
         public bool IsExpired
         {
             get

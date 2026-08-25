@@ -19,6 +19,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 using DnsServerCore.ApplicationCommon;
 using System;
+using System.Net;
 using System.Net.Mail;
 using System.Threading;
 using System.Threading.Tasks;
@@ -62,6 +63,11 @@ namespace DnsServerCore.Dns.Applications
             return _dnsServer.DirectQueryAsync(request, timeout, true, cancellationToken);
         }
 
+        public Task<DnsDatagram> DirectQueryAsync(DnsDatagram request, IPEndPoint remoteEP, int timeout = 4000, CancellationToken cancellationToken = default)
+        {
+            return _dnsServer.DirectQueryAsync(request, remoteEP, timeout, true, cancellationToken);
+        }
+
         public Task<DnsDatagram> ResolveAsync(DnsQuestionRecord question, CancellationToken cancellationToken = default)
         {
             return DirectQueryAsync(question, cancellationToken: cancellationToken);
@@ -74,7 +80,12 @@ namespace DnsServerCore.Dns.Applications
 
         public void WriteLog(Exception ex)
         {
-            _dnsServer.LogManager.Write("DNS App [" + _applicationName + "]: " + ex.ToString());
+            _dnsServer.LogManager.Write("DNS App [" + _applicationName + "]: ", ex);
+        }
+
+        public void WriteLog(string message, Exception ex)
+        {
+            _dnsServer.LogManager.Write("DNS App [" + _applicationName + "]: " + message, ex);
         }
 
         #endregion
