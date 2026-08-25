@@ -27,6 +27,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
@@ -48,6 +49,7 @@ namespace QueryLogsPostgreSql
         int _maxQueueSize;
         int _maxLogDays;
         int _maxLogRecords;
+        QnameFilter? _ignoredQnames;
         string? _databaseName;
         string? _connectionString;
 
@@ -362,6 +364,10 @@ namespace QueryLogsPostgreSql
                 int maxQueueSize = jsonConfig.GetPropertyValue("maxQueueSize", 1000000);
                 _maxLogDays = jsonConfig.GetPropertyValue("maxLogDays", 0);
                 _maxLogRecords = jsonConfig.GetPropertyValue("maxLogRecords", 0);
+
+                jsonConfig.TryReadArray("ignoredQnames", out string[]? ignoredQnames);
+                _ignoredQnames = QnameFilter.Create(ignoredQnames);
+
                 _databaseName = jsonConfig.GetPropertyValue("databaseName", "DnsQueryLogs");
                 _connectionString = jsonConfig.GetPropertyValue("connectionString", null);
 
@@ -682,7 +688,12 @@ CREATE TABLE IF NOT EXISTS dns_logs
         public Task InsertLogAsync(DateTime timestamp, DnsDatagram request, IPEndPoint remoteEP, DnsTransportProtocol protocol, DnsDatagram response)
         {
             if (_enableLogging)
-                _channelWriter?.TryWrite(new LogEntry(timestamp, request, remoteEP, protocol, response));
+            {
+                QnameFilter? ignoredQnames = _ignoredQnames;
+
+                if ((ignoredQnames is null) || (request.Question.Count == 0) || !ignoredQnames.IsIgnored(request.Question[0].Name))
+                    _channelWriter?.TryWrite(new LogEntry(timestamp, request, remoteEP, protocol, response));
+            }
 
             return Task.CompletedTask;
         }
@@ -909,6 +920,101 @@ LIMIT @limit OFFSET @offset";
                 RemoteEP = remoteEP;
                 Protocol = protocol;
                 Response = response;
+            }
+
+            #endregion
+        }
+
+        sealed class QnameFilter
+        {
+            #region variables
+
+            readonly HashSet<string> _zones;
+            readonly Regex[] _patterns;
+
+            #endregion
+
+            #region constructor
+
+            private QnameFilter(HashSet<string> zones, Regex[] patterns)
+            {
+                _zones = zones;
+                _patterns = patterns;
+            }
+
+            #endregion
+
+            #region static
+
+            public static QnameFilter? Create(string?[]? entries)
+            {
+                if ((entries is null) || (entries.Length == 0))
+                    return null;
+
+                HashSet<string> zones = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                List<Regex> patterns = new List<Regex>();
+
+                foreach (string? entry in entries)
+                {
+                    if (string.IsNullOrWhiteSpace(entry))
+                        continue;
+
+                    string name = entry.Trim().TrimEnd('.');
+                    if (name.Length == 0)
+                        continue;
+
+                    if (name.Contains('*'))
+                        patterns.Add(new Regex("^" + string.Join(".*", Array.ConvertAll(name.Split('*'), Regex.Escape)) + "$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled));
+                    else
+                        zones.Add(name);
+                }
+
+                if ((zones.Count == 0) && (patterns.Count == 0))
+                    return null;
+
+                return new QnameFilter(zones, patterns.ToArray());
+            }
+
+            private static string? GetParentZone(string domain)
+            {
+                int i = domain.IndexOf('.');
+                if (i > -1)
+                    return domain.Substring(i + 1);
+
+                //dont return root zone
+                return null;
+            }
+
+            #endregion
+
+            #region public
+
+            public bool IsIgnored(string qname)
+            {
+                if (qname.Length == 0)
+                    return false; //root zone query
+
+                if (_zones.Count > 0)
+                {
+                    string? domain = qname;
+
+                    do
+                    {
+                        if (_zones.Contains(domain))
+                            return true; //the qname is the configured domain or its subdomain
+
+                        domain = GetParentZone(domain);
+                    }
+                    while (domain is not null);
+                }
+
+                foreach (Regex pattern in _patterns)
+                {
+                    if (pattern.IsMatch(qname))
+                        return true;
+                }
+
+                return false;
             }
 
             #endregion

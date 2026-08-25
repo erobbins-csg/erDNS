@@ -6,6 +6,7 @@ A DNS App for Technitium DNS Server that logs DNS queries to a PostgreSQL databa
 
 - **Async logging** – writes log entries through a bounded queue
 - **Cleanup support** – prunes old records by age/count
+- **Qname filtering** – silently drops selected domains so they are never logged
 - **Retained schema** – uses a database name and connection string for storage
 
 ## Integration / extension points
@@ -51,6 +52,7 @@ The database table stores values for some fields in numeric format. The fields a
 | `maxQueueSize` | number | `1000000` | Maximum number of log entries allowed in the in-memory queue before new entries are dropped. |
 | `maxLogDays` | number | `0` | Maximum age (days) to retain. `0` disables age-based cleanup. |
 | `maxLogRecords` | number | `0` | Maximum number of records to retain. `0` disables count-based cleanup. |
+| `ignoredQnames` | array of strings | `[]` | Domain names whose queries are silently dropped and never logged. See [Ignoring domains](#ignoring-domains). |
 | `databaseName` | string | `"DnsQueryLogs"` | Database name used to store logs. |
 | `connectionString` | string | *(required)* | PostgreSQL connection string **without** the database name. The app appends `Database={databaseName};` internally. |
 
@@ -62,16 +64,47 @@ The database table stores values for some fields in numeric format. The fields a
   "maxQueueSize": 1000000,
   "maxLogDays": 0,
   "maxLogRecords": 0,
+  "ignoredQnames": [],
   "databaseName": "DnsQueryLogs",
   "connectionString": "Server=192.168.180.128; Port=3306; Uid=username; Pwd=password;"
 }
 ```
 
+### Ignoring domains
+
+Any query whose question name matches an entry in `ignoredQnames` is discarded before it enters the
+queue: nothing is written to the database and no error or warning is logged. Matching is case
+insensitive and a trailing dot on an entry is ignored. Entries take one of two forms:
+
+- **Domain name** (no `*`) – matches that domain **and all of its subdomains**. For example,
+  `example.com` drops `example.com`, `www.example.com`, and `a.b.example.com`.
+- **Wildcard pattern** (contains `*`) – `*` matches any sequence of characters in the full question
+  name. For example, `*.metrics.example.com` drops subdomains of `metrics.example.com` but not
+  `metrics.example.com` itself, and `ntp*.pool.ntp.org` drops `ntp1.pool.ntp.org`.
+
+```json
+{
+  "ignoredQnames": [
+    "health-check.internal",
+    "in-addr.arpa",
+    "*.metrics.example.com"
+  ]
+}
+```
+
+This only affects new log entries. Records already stored in the database are left untouched and
+still appear in query log searches, so remove them manually if needed:
+
+```sql
+DELETE FROM dns_logs WHERE qname = 'health-check.internal' OR qname LIKE '%.health-check.internal';
+```
+
 ## Runtime behavior
 
-1. Queries are buffered in a bounded channel.
-2. A background consumer thread bulk inserts records into PostgreSQL storage.
-3. A periodic cleanup timer removes old records.
+1. Queries matching `ignoredQnames` are dropped.
+2. Remaining queries are buffered in a bounded channel.
+3. A background consumer thread bulk inserts records into PostgreSQL storage.
+4. A periodic cleanup timer removes old records.
 
 ## Risks / operational notes
 
